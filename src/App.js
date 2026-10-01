@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { adminApi, auth, configured, friendlyError } from './firebase';
 import './App.css';
+import './UserEditor.css';
 
 const icons = {
   users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3a4 4 0 0 1 0 8M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></>,
@@ -30,11 +31,12 @@ function UserValueFields({ data, onChange, path = [] }) {
   return Object.entries(data || {}).map(([key, fieldValue]) => {
     const fieldPath = [...path, key];
     const label = fieldPath.join(' / ');
+    const immutable = key === 'id' || key === 'uid';
     if (fieldValue && typeof fieldValue === 'object' && !(fieldValue instanceof Date)) {
       return <div className="edit-field-group" key={label}><strong>{label}</strong><UserValueFields data={fieldValue} onChange={onChange} path={fieldPath}/></div>;
     }
     const update = nextValue => onChange(fieldPath, nextValue);
-    return <label className="edit-field" key={label}><span>{label}</span>{typeof fieldValue === 'boolean' ? <select aria-label={label} value={String(fieldValue)} onChange={event => update(event.target.value === 'true')}><option value="true">Yes</option><option value="false">No</option></select> : typeof fieldValue === 'number' ? <input aria-label={label} type="number" value={fieldValue} onChange={event => update(event.target.value === '' ? null : Number(event.target.value))}/> : <input aria-label={label} type="text" value={fieldValue == null ? '' : String(fieldValue)} onChange={event => update(event.target.value)}/>}</label>;
+    return <label className="edit-field" key={label}><span>{label}</span>{typeof fieldValue === 'boolean' ? <select aria-label={label} value={String(fieldValue)} disabled={immutable} onChange={event => update(event.target.value === 'true')}><option value="true">Yes</option><option value="false">No</option></select> : typeof fieldValue === 'number' ? <input aria-label={label} type="number" value={fieldValue} disabled={immutable} onChange={event => update(event.target.value === '' ? null : Number(event.target.value))}/> : <input aria-label={label} type="text" value={fieldValue == null ? '' : String(fieldValue)} disabled={immutable} onChange={event => update(event.target.value)}/>}</label>;
   });
 }
 function Empty({ title, children, icon = 'users' }) { return <div className="empty"><span className="empty-icon"><Icon name={icon} size={27}/></span><h3>{title}</h3><p>{children}</p></div>; }
@@ -75,32 +77,52 @@ function Users({ enabled, openUser, connect }) {
     <div className="privacy-note"><Icon name="shield" size={17}/><span>Private by design. Payment details are masked and access is restricted to verified admins.</span></div>
   </>;
 }
-function TransactionList({ uid, showDetails }) {
+function TransactionList({ uid, showDetails, onEdit }) {
   const list = usePage('transactions', { uid }, true);
-  return <><ListFeedback list={list} noun="transactions"/><div className="table-wrap"><table><thead><tr><th>Transaction</th><th>Type</th><th>Amount</th><th>Status</th><th>Created</th><th/></tr></thead><tbody>{list.items.map(t => <tr key={t.id}><td className="mono">{t.id}</td><td>{value(t.type)}</td><td>{money(t.amount, t.currency)}</td><td><Badge>{t.status}</Badge></td><td>{date(t.createdAt)}</td><td><button className="text-button" onClick={() => showDetails(uid, t.id)}>Details ↗</button></td></tr>)}</tbody></table></div>{!list.busy && !list.error && !list.items.length && <Empty title="No transactions yet" icon="requests">This user has no dated transaction records.</Empty>}<Pager list={list}/></>;
+  return <><ListFeedback list={list} noun="transactions"/><div className="table-wrap"><table><thead><tr><th>Transaction</th><th>Type</th><th>Amount</th><th>Status</th><th>Created</th><th/></tr></thead><tbody>{list.items.map(t => <tr key={t.id}><td className="mono">{t.id}</td><td>{value(t.type)}</td><td>{money(t.amount, t.currency)}</td><td><Badge>{t.status}</Badge></td><td>{date(t.createdAt)}</td><td className="row-actions"><button className="text-button" onClick={() => showDetails(uid, t.id)}>Details ↗</button><button className="text-button" onClick={() => onEdit('transactions', t, list.refresh)}>Edit</button></td></tr>)}</tbody></table></div>{!list.busy && !list.error && !list.items.length && <Empty title="No transactions yet" icon="requests">This user has no dated transaction records.</Empty>}<Pager list={list}/></>;
 }
-function Methods({ uid, kind }) {
+function Methods({ uid, kind, onEdit }) {
   const list = usePage('methods', { uid, kind }, true);
-  return <><ListFeedback list={list} noun={kind === 'card' ? 'cards' : 'banks'}/><div className="method-grid">{list.items.map(m => <div className="method" key={m.id}><Icon name="accounts"/><h3>{m.brand || m.bankName || (kind === 'card' ? 'Saved card' : 'Bank account')}</h3><Fields data={m}/><Badge>{m.status}</Badge></div>)}</div>{!list.busy && !list.error && !list.items.length && <Empty title={kind === 'card' ? 'No saved cards' : 'No saved banks'} icon="accounts">No payment methods of this kind were found.</Empty>}<Pager list={list}/></>;
+  return <><ListFeedback list={list} noun={kind === 'card' ? 'cards' : 'banks'}/><div className="method-grid">{list.items.map(m => <article className="method" key={m.id}><div className="method-heading"><div><Icon name="accounts"/><h3>{m.brand || m.bankName || (kind === 'card' ? 'Saved card' : 'Bank account')}</h3></div><button className="text-button" onClick={() => onEdit('methods', m, list.refresh)}>Edit</button></div><Fields data={m}/><Badge>{m.status}</Badge></article>)}</div>{!list.busy && !list.error && !list.items.length && <Empty title={kind === 'card' ? 'No saved cards' : 'No saved banks'} icon="accounts">No payment methods of this kind were found.</Empty>}<Pager list={list}/></>;
 }
-function Notifications({ uid }) {
+function Notifications({ uid, onEdit }) {
   const list = usePage('notifications', { uid }, true);
-  return <><ListFeedback list={list} noun="notifications"/><div className="method-grid">{list.items.map(notification => <article className="method" key={notification.id}><h3>{notification.title || notification.subject || 'Notification'}</h3><Fields data={notification}/></article>)}</div>{!list.busy && !list.error && !list.items.length && <Empty title="No notifications" icon="requests">No notifications were found for this user.</Empty>}<Pager list={list}/></>;
+  return <><ListFeedback list={list} noun="notifications"/><div className="method-grid">{list.items.map(notification => <article className="method" key={notification.id}><div className="method-heading"><h3>{notification.title || notification.subject || 'Notification'}</h3><button className="text-button" onClick={() => onEdit('notifications', notification, list.refresh)}>Edit</button></div><Fields data={notification}/></article>)}</div>{!list.busy && !list.error && !list.items.length && <Empty title="No notifications" icon="requests">No notifications were found for this user.</Empty>}<Pager list={list}/></>;
 }
 function UserDetail({ uid, back, showDetails }) {
   const [tab, setTab] = useState('Profile'); const [data, setData] = useState(null); const [error, setError] = useState(''); const [retry, setRetry] = useState(0);
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState(null);
   const [draft, setDraft] = useState(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => { let alive = true; setError(''); adminApi('user', { uid }).then(d => { if (alive) setData(d); }).catch(e => { if (alive) setError(friendlyError(e)); }); return () => { alive = false; }; }, [uid, retry]);
-  useEffect(() => { if (data) setDraft(data); }, [data, editorOpen]);
-  const saveUser = async () => {
+  const startRecordEdit = async (section, record, refresh) => {
+    setError('');
+    try {
+      const selectedRecord = section === 'transactions'
+        ? await adminApi('transaction', { uid, transactionId: record.id })
+        : record;
+      setDraft({ ...selectedRecord });
+      setEditingRecord({ section, recordId: selectedRecord.id || null, refresh });
+    } catch (editError) {
+      setError(friendlyError(editError));
+    }
+  };
+  const saveRecord = async () => {
     setBusy(true); setError('');
     try {
-      await adminApi('updateUser', { uid, data: draft });
-      setData(draft);
-      setEditorOpen(false);
+      await adminApi('updateUserRecord', {
+        uid,
+        section: editingRecord.section,
+        recordId: editingRecord.recordId,
+        data: draft,
+      });
+      if (['profile', 'balance', 'personal'].includes(editingRecord.section)) {
+        setData(current => ({ ...current, [editingRecord.section]: { ...current[editingRecord.section], ...draft } }));
+      } else {
+        editingRecord.refresh?.();
+      }
+      setEditingRecord(null);
     } catch (e) {
       setError(friendlyError(e));
     } finally {
@@ -129,28 +151,30 @@ function UserDetail({ uid, back, showDetails }) {
     {!data && !error && <div className="loading">Loading profile…</div>}
     {data && <>
       <div className="toolbar user-actions">
-        <button className="button" onClick={() => { setDraft(data); setEditorOpen(true); }}>Edit all user data</button>
         <button className="button danger" onClick={() => setDeleteOpen(true)}>Delete user</button>
       </div>
       <div className="tabs" role="tablist">{['Profile', 'Balance', 'All transactions', 'Saved cards', 'Saved banks', 'Notifications'].map(t => <button role="tab" aria-selected={t === tab} className={t === tab ? 'selected' : ''} key={t} onClick={() => setTab(t)}>{t}</button>)}</div>
       <section className="panel detail-panel">
         <div className="panel-title"><div><h2>{tab}</h2><p>{tab === 'All transactions' ? 'Full history, newest first. Browse older records using the page controls.' : tab.startsWith('Saved') ? 'Showing raw payment detail values from Firestore.' : 'Account information from Toppay.'}</p></div></div>
-        {tab === 'Profile' && <div className="detail-content"><Fields data={data.profile || {}}/></div>}
-        {tab === 'Balance' && <div className="detail-content"><div className="balance-value">{money(data.wallet?.balance, data.wallet?.currency)}</div><Fields data={data.wallet || {}}/></div>}
-        {tab === 'All transactions' && <TransactionList uid={uid} showDetails={showDetails}/>}
-        {tab === 'Saved cards' && <Methods key="card" uid={uid} kind="card"/>}
-        {tab === 'Saved banks' && <Methods key="bank" uid={uid} kind="bank"/>}
-        {tab === 'Notifications' && <Notifications uid={uid}/>}
+        {tab === 'Profile' && <div className="detail-content">
+          <div className="record-section-heading"><h3>Profile</h3><button className="text-button" onClick={() => startRecordEdit('profile', data.profile || {})}>Edit</button></div>
+          <Fields data={data.profile || {}}/>
+          <div className="record-section-heading"><h3>Personal information</h3><button className="text-button" disabled={!Object.keys(data.personal || {}).length} onClick={() => startRecordEdit('personal', data.personal || {})}>Edit</button></div>
+          <Fields data={data.personal || {}}/>
+        </div>}
+        {tab === 'Balance' && <div className="detail-content">
+          <div className="record-section-heading"><h3>Wallet</h3><button className="text-button" disabled={!Object.keys(data.wallet || {}).length} onClick={() => startRecordEdit('balance', data.wallet || {})}>Edit</button></div>
+          <div className="balance-value">{money(data.wallet?.balance, data.wallet?.currency)}</div><Fields data={data.wallet || {}}/>
+        </div>}
+        {tab === 'All transactions' && <TransactionList uid={uid} showDetails={showDetails} onEdit={startRecordEdit}/>}
+        {tab === 'Saved cards' && <Methods key="card" uid={uid} kind="card" onEdit={startRecordEdit}/>}
+        {tab === 'Saved banks' && <Methods key="bank" uid={uid} kind="bank" onEdit={startRecordEdit}/>}
+        {tab === 'Notifications' && <Notifications uid={uid} onEdit={startRecordEdit}/>}
       </section>
     </>}
-    {editorOpen && <Modal title="Edit user data" close={() => setEditorOpen(false)}>
-      <div className="user-editor">
-        {['profile', 'wallet', 'personal'].map(section => <section className="edit-section" key={section}>
-          <h3>{section === 'personal' ? 'Personal information' : section[0].toUpperCase() + section.slice(1)}</h3>
-          <div className="edit-fields"><UserValueFields data={draft?.[section] || {}} path={[section]} onChange={(fieldPath, nextValue) => setDraft(current => setUserValue(current, fieldPath, nextValue))}/></div>
-        </section>)}
-      </div>
-      <div className="modal-actions"><button className="button" onClick={() => setEditorOpen(false)}>Cancel</button><button className="primary" onClick={saveUser} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button></div>
+    {editingRecord && <Modal className="record-editor-dialog" title={`Edit ${editingRecord.section === 'personal' ? 'personal information' : editingRecord.section}${editingRecord.recordId ? ` · ${editingRecord.recordId}` : ''}`} close={() => setEditingRecord(null)}>
+      <div className="record-editor"><div className="edit-fields"><UserValueFields data={draft || {}} onChange={(fieldPath, nextValue) => setDraft(current => setUserValue(current, fieldPath, nextValue))}/></div></div>
+      <div className="modal-actions"><button className="button" onClick={() => setEditingRecord(null)}>Cancel</button><button className="primary" onClick={saveRecord} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button></div>
     </Modal>}
     {deleteOpen && <Modal title="Delete user" close={() => setDeleteOpen(false)}><div className="modal-copy"><p>Are you sure you want to delete this user and their profile data?</p></div><div className="modal-actions"><button className="button" onClick={() => setDeleteOpen(false)}>Cancel</button><button className="button danger" onClick={deleteUser} disabled={busy}>{busy ? 'Deleting…' : 'Confirm delete'}</button></div></Modal>}
   </>;
@@ -160,10 +184,10 @@ function OtherSection({ section, enabled, connect, openUser, showDetails }) {
   const list = usePage(section, {}, enabled);
   return <><div className="page-heading"><div><div className="eyebrow">TOPPAY ADMINISTRATION</div><h1>{sections[section][0]}</h1><p>{sections[section][1]}</p></div><button className="button" disabled={!enabled || list.busy} onClick={list.refresh}><Icon name="refresh" size={16}/> Refresh</button></div><section className="panel"><div className="panel-title"><h2>{sections[section][0]}</h2><span className="small-label">View only</span></div>{!enabled ? <Empty title="Connect to view records" icon={section}>Sign in with your verified admin account.<br/><button className="primary" onClick={connect}>{configured ? 'Sign in' : 'View connection setup'} ↗</button></Empty> : <><ListFeedback list={list} noun={sections[section][0].toLowerCase()}/>{section === 'requests' ? <div className="table-wrap"><table><thead><tr><th>Request ID</th><th>User</th><th>Amount</th><th>Status</th><th>Created</th><th/></tr></thead><tbody>{list.items.map(r => <tr key={r.id}><td className="mono">{r.id}</td><td><button className="text-button" disabled={!r.uid} onClick={() => openUser(r.uid)}>{value(r.uid)}</button></td><td>{money(r.amount, r.currency)}</td><td><Badge>{r.status}</Badge></td><td>{date(r.createdAt)}</td><td><button className="text-button" disabled={!r.uid} onClick={() => showDetails(r.uid, r.id)}>View transaction ↗</button></td></tr>)}</tbody></table></div> : <div className="method-grid">{list.items.map(r => <article className="method" key={r.id}><Icon name={section}/><h3>{section === 'bonuses' ? r.id === 'sendmoney' ? 'Send money' : 'Cash out' : r.name || r.bankName || 'Payment account'}</h3><Fields data={section === 'bonuses' ? { Enabled: r.enabled == null ? null : r.enabled ? 'Yes' : 'No', Amount: money(r.amount, r.currency), Percentage: r.percentage == null ? null : `${r.percentage}%` } : { 'Account number': r.last4 ? `•••• ${r.last4}` : null, Currency: r.currency, Status: r.status }}/></article>)}</div>}{!list.busy && !list.error && !list.items.length && <Empty title="No records found" icon={section}>Records will appear here when available.</Empty>}{section !== 'bonuses' && <Pager list={list}/>}</>}</section></>;
 }
-function Modal({ title, close, children }) {
+function Modal({ title, close, children, className = '' }) {
   const dialog = useRef(null);
   useEffect(() => { const node = dialog.current; node.showModal(); return () => node.close(); }, []);
-  return <dialog ref={dialog} onCancel={close} onClick={e => { if (e.target === dialog.current) close(); }} aria-labelledby="dialog-title"><div className="modal-head"><h2 id="dialog-title">{title}</h2><button className="icon-button" onClick={close} aria-label="Close dialog">✕</button></div>{children}</dialog>;
+  return <dialog ref={dialog} className={className} onCancel={close} onClick={e => { if (e.target === dialog.current) close(); }} aria-labelledby="dialog-title"><div className="modal-head"><h2 id="dialog-title">{title}</h2><button className="icon-button" onClick={close} aria-label="Close dialog">✕</button></div>{children}</dialog>;
 }
 function Connection({ close }) { return <Modal title="Connect your workspace" close={close}><p className="modal-copy">This admin panel is prepared for <strong>toppay-2bd66</strong>. No live user data has been loaded.</p><ol className="setup-list"><li>Add the original project's web Firebase configuration to <code>.env.local</code> using <code>.env.example</code>.</li><li>Deploy and confirm the <code>toppayAdminApi</code> backend. Audit the shared project's Firestore rules before going live.</li><li>Restart the panel and sign in with an email-verified account whose user document has <code>admin: true</code>.</li></ol><div className="notice">Connection and backend deployment have not been verified.</div><button className="primary full" onClick={close}>Got it</button></Modal>; }
 function Login({ close }) {

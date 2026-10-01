@@ -155,6 +155,29 @@ async function directAdminApi(action, payload = {}) {
         uid: raw.uid ?? uid,
       };
     }
+    case 'updateUserRecord': {
+      const { uid, section, recordId } = payload;
+      const recordPaths = {
+        profile: ['users', uid],
+        balance: ['users', uid, 'wallet', 'summary'],
+        personal: ['users', uid, 'personalInformation', 'profile'],
+        transactions: ['users', uid, 'transactions', recordId],
+        methods: ['users', uid, 'paymentMethods', recordId],
+        notifications: ['users', uid, 'notifications', recordId],
+      };
+      const path = recordPaths[section];
+      if (!path || (['transactions', 'methods', 'notifications'].includes(section) && !recordId)) {
+        throw directError('invalid-argument', 'Select a valid user record to update.');
+      }
+      const recordRef = doc(db, ...path);
+      const recordSnap = await getDoc(recordRef);
+      if (!recordSnap.exists()) throw directError('not-found', 'User record not found.');
+      const changes = { ...(payload.data || {}) };
+      delete changes.id;
+      delete changes.uid;
+      await setDoc(recordRef, changes, { merge: true });
+      return { ok: true };
+    }
     case 'updateUser': {
       const uid = payload.uid;
       const data = payload.data || {};

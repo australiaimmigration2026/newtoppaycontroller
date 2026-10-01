@@ -47,6 +47,7 @@ test('loads and displays notifications for the selected user', async () => {
     if (action === 'users') return { items: [{ uid: 'u1', name: 'Test User', status: 'active' }], nextCursor: null };
     if (action === 'user') return { profile: { name: 'Test User' }, wallet: {}, personal: {} };
     if (action === 'notifications' && input.uid === 'u1') return { items: [{ id: 'notice-1', title: 'Payment update', message: 'Your payment was received', read: false }], nextCursor: null };
+    if (action === 'updateUserRecord') return { ok: true };
     throw new Error('Unexpected action');
   });
 
@@ -58,6 +59,68 @@ test('loads and displays notifications for the selected user', async () => {
   expect(screen.getByText('Your payment was received')).toBeInTheDocument();
   expect(screen.getByText('notice-1')).toBeInTheDocument();
   expect(adminApi).toHaveBeenCalledWith('notifications', { uid: 'u1', cursor: null });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(await screen.findByLabelText('message'), { target: { value: 'Payment completed successfully' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(adminApi).toHaveBeenCalledWith('updateUserRecord', {
+    uid: 'u1', section: 'notifications', recordId: 'notice-1',
+    data: { id: 'notice-1', title: 'Payment update', message: 'Payment completed successfully', read: false }
+  }));
+});
+
+test('editing a transaction updates that user transaction document', async () => {
+  onAuthStateChanged.mockImplementation((auth, callback) => { callback({ uid: 'admin', email: 'admin@example.test' }); return () => {}; });
+  adminApi.mockImplementation(async (action, input) => {
+    if (action === 'session') return { verified: true };
+    if (action === 'users') return { items: [{ uid: 'u1', name: 'Test User', status: 'active' }], nextCursor: null };
+    if (action === 'user') return { profile: { name: 'Test User' }, wallet: {}, personal: {} };
+    if (action === 'transactions') return { items: [{ id: 'tx-1', type: 'deposit', amount: 150, status: 'pending', currency: 'BDT' }], nextCursor: null };
+    if (action === 'transaction') return { id: 'tx-1', uid: 'u1', type: 'deposit', amount: 150, balanceImpact: 20, status: 'pending', currency: 'BDT' };
+    if (action === 'updateUserRecord') return { ok: true };
+    throw new Error('Unexpected action');
+  });
+
+  render(<App/>);
+  fireEvent.click(await screen.findByRole('button', { name: /Test User No email/ }));
+  await screen.findByRole('heading', { name: 'Test User' });
+  fireEvent.click(screen.getByRole('tab', { name: 'All transactions' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+  fireEvent.change(await screen.findByLabelText('status'), { target: { value: 'completed' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+  await waitFor(() => expect(adminApi).toHaveBeenCalledWith('updateUserRecord', {
+    uid: 'u1', section: 'transactions', recordId: 'tx-1',
+    data: { id: 'tx-1', uid: 'u1', type: 'deposit', amount: 150, balanceImpact: 20, status: 'completed', currency: 'BDT' }
+  }));
+});
+
+test.each([
+  ['Saved cards', 'card', 'card-1'],
+  ['Saved banks', 'bank', 'bank-1'],
+])('%s edits only its selected payment method', async (tab, kind, recordId) => {
+  onAuthStateChanged.mockImplementation((auth, callback) => { callback({ uid: 'admin', email: 'admin@example.test' }); return () => {}; });
+  adminApi.mockImplementation(async (action, input) => {
+    if (action === 'session') return { verified: true };
+    if (action === 'users') return { items: [{ uid: 'u1', name: 'Test User', status: 'active' }], nextCursor: null };
+    if (action === 'user') return { profile: { name: 'Test User' }, wallet: {}, personal: {} };
+    if (action === 'methods') return { items: [{ id: recordId, kind: input.kind, brand: 'Visa', last4: '4242' }], nextCursor: null };
+    if (action === 'updateUserRecord') return { ok: true };
+    throw new Error('Unexpected action');
+  });
+
+  render(<App/>);
+  fireEvent.click(await screen.findByRole('button', { name: /Test User No email/ }));
+  await screen.findByRole('heading', { name: 'Test User' });
+  fireEvent.click(screen.getByRole('tab', { name: tab }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+  fireEvent.change(await screen.findByLabelText('brand'), { target: { value: 'Updated method' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+  await waitFor(() => expect(adminApi).toHaveBeenCalledWith('updateUserRecord', {
+    uid: 'u1', section: 'methods', recordId,
+    data: { id: recordId, kind, brand: 'Updated method', last4: '4242' }
+  }));
 });
 
 test('opens the exact user transaction detail from the requests list', async () => {
@@ -120,7 +183,7 @@ test('admin can edit user values without changing field names and delete the rec
     if (action === 'users') return { items: [{ uid: 'u1', name: 'Test User', status: 'active', email: 'test@example.com', createdAt: '2024-01-01T00:00:00.000Z' }], nextCursor: null };
     if (action === 'user') return { profile: { name: 'Test User', status: 'active' }, wallet: { balance: 250, currency: 'BDT' }, personal: { city: 'Dhaka' } };
     if (action === 'transactions') return { items: [], nextCursor: null };
-    if (action === 'updateUser') return { ok: true };
+    if (action === 'updateUserRecord') return { ok: true };
     if (action === 'deleteUser') return { ok: true };
     throw new Error('Unexpected action');
   });
@@ -128,18 +191,30 @@ test('admin can edit user values without changing field names and delete the rec
   render(<App />);
   const userButtons = await screen.findAllByRole('button', { name: /Test User/i });
   fireEvent.click(userButtons[0]);
-  fireEvent.click(await screen.findByRole('button', { name: 'Edit all user data' }));
+  const profileEditButtons = await screen.findAllByRole('button', { name: 'Edit' });
+  fireEvent.click(profileEditButtons[0]);
 
-  const nameField = await screen.findByLabelText('profile / name');
+  const nameField = await screen.findByLabelText('name');
   fireEvent.change(nameField, { target: { value: 'Updated User' } });
-  fireEvent.change(screen.getByLabelText('wallet / balance'), { target: { value: '500' } });
-  fireEvent.change(screen.getByLabelText('personal / city'), { target: { value: 'Chittagong' } });
-  expect(screen.queryByLabelText('User data JSON')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
-  await waitFor(() => expect(adminApi).toHaveBeenCalledWith('updateUser', {
+  await waitFor(() => expect(adminApi).toHaveBeenCalledWith('updateUserRecord', {
     uid: 'u1',
-    data: { profile: { name: 'Updated User', status: 'active' }, wallet: { balance: 500, currency: 'BDT' }, personal: { city: 'Chittagong' } }
+    section: 'profile',
+    recordId: null,
+    data: { name: 'Updated User', status: 'active' }
+  }));
+
+  fireEvent.click(screen.getByRole('tab', { name: 'Balance' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+  fireEvent.change(await screen.findByLabelText('balance'), { target: { value: '500' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+  await waitFor(() => expect(adminApi).toHaveBeenCalledWith('updateUserRecord', {
+    uid: 'u1',
+    section: 'balance',
+    recordId: null,
+    data: { balance: 500, currency: 'BDT' }
   }));
 
   fireEvent.click(screen.getByRole('button', { name: 'Delete user' }));

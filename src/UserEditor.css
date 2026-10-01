@@ -1,0 +1,150 @@
+.record-editor-dialog {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(680px, calc(100vw - 32px));
+  max-width: 680px;
+  max-height: 84vh;
+  padding: 0;
+  overflow: hidden;
+}
+
+.record-editor-dialog .modal-head {
+  flex: 0 0 auto;
+  padding: 18px 22px;
+  background: #fff;
+  border-bottom: 1px solid #e4e9e2;
+}
+
+.record-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  padding: 4px 22px 22px;
+}
+
+.record-editor .edit-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.record-editor .edit-field,
+.record-editor .edit-field-group {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.record-editor .edit-field {
+  color: #52664f;
+  font-size: 12px;
+}
+
+.record-editor .edit-field input,
+.record-editor .edit-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid #dce5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #273b2d;
+  font: inherit;
+  font-size: 13px;
+}
+
+.record-editor .edit-field input:focus,
+.record-editor .edit-field select:focus {
+  border-color: #34794f;
+  outline: 2px solid #34794f33;
+}
+
+.record-editor .edit-field input:disabled,
+.record-editor .edit-field select:disabled {
+  background: #f2f5f1;
+  color: #8c9a82;
+}
+
+.record-editor .edit-field-group {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 14px;
+  border-top: 1px solid #e8ede7;
+}
+
+.record-editor .edit-field-group > strong {
+  grid-column: 1 / -1;
+  color: #273b2d;
+  font-size: 12px;
+}
+
+.record-editor .edit-field-group > .edit-field-group {
+  grid-column: 1 / -1;
+}
+
+.record-editor-dialog .modal-actions {
+  flex: 0 0 auto;
+  padding: 14px 22px;
+  background: #f7f9f6;
+  border-top: 1px solid #e4e9e2;
+}
+
+.record-section-heading,
+.method-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.record-section-heading {
+  margin: 18px 0 8px;
+}
+
+.record-section-heading h3,
+.method-heading h3 {
+  margin: 0;
+  color: #273b2d;
+  font-size: 13px;
+}
+
+.method-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.row-actions {
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .record-editor-dialog {
+    width: calc(100vw - 20px);
+    max-height: 90vh;
+  }
+
+  .record-editor-dialog .modal-head,
+  .record-editor-dialog .modal-actions {
+    padding-right: 15px;
+    padding-left: 15px;
+  }
+
+  .record-editor {
+    padding-right: 15px;
+    padding-left: 15px;
+  }
+
+  .record-editor .edit-fields,
+  .record-editor .edit-field-group {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .record-editor .edit-field-group > strong {
+    grid-column: 1;
+  }
+}
