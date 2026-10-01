@@ -40,6 +40,26 @@ test('opens profile, pages older transactions and shows safe transaction details
   expect(screen.getByRole('dialog')).toHaveTextContent('currency');
 });
 
+test('loads and displays notifications for the selected user', async () => {
+  onAuthStateChanged.mockImplementation((auth, callback) => { callback({ uid: 'admin', email: 'admin@example.test' }); return () => {}; });
+  adminApi.mockImplementation(async (action, input) => {
+    if (action === 'session') return { verified: true };
+    if (action === 'users') return { items: [{ uid: 'u1', name: 'Test User', status: 'active' }], nextCursor: null };
+    if (action === 'user') return { profile: { name: 'Test User' }, wallet: {}, personal: {} };
+    if (action === 'notifications' && input.uid === 'u1') return { items: [{ id: 'notice-1', title: 'Payment update', message: 'Your payment was received', read: false }], nextCursor: null };
+    throw new Error('Unexpected action');
+  });
+
+  render(<App/>);
+  fireEvent.click(await screen.findByRole('button', { name: /Test User No email/ }));
+  fireEvent.click(await screen.findByRole('tab', { name: 'Notifications' }));
+
+  expect(await screen.findByRole('heading', { name: 'Payment update' })).toBeInTheDocument();
+  expect(screen.getByText('Your payment was received')).toBeInTheDocument();
+  expect(screen.getByText('notice-1')).toBeInTheDocument();
+  expect(adminApi).toHaveBeenCalledWith('notifications', { uid: 'u1', cursor: null });
+});
+
 test('opens the exact user transaction detail from the requests list', async () => {
   onAuthStateChanged.mockImplementation((auth, callback) => { callback({ uid: 'admin', email: 'admin@example.test' }); return () => {}; });
   adminApi.mockImplementation(async (action, input) => {
@@ -93,7 +113,7 @@ test('shows all raw transaction fields in the detail dialog', async () => {
   expect(screen.getByRole('dialog')).toHaveTextContent('417052568258184');
 });
 
-test('admin can edit and delete a user record', async () => {
+test('admin can edit user values without changing field names and delete the record', async () => {
   onAuthStateChanged.mockImplementation((auth, callback) => { callback({ uid: 'admin', email: 'admin@example.test' }); return () => {}; });
   adminApi.mockImplementation(async (action, input) => {
     if (action === 'session') return { verified: true };
@@ -110,8 +130,11 @@ test('admin can edit and delete a user record', async () => {
   fireEvent.click(userButtons[0]);
   fireEvent.click(await screen.findByRole('button', { name: 'Edit all user data' }));
 
-  const textarea = await screen.findByLabelText('User data JSON');
-  fireEvent.change(textarea, { target: { value: JSON.stringify({ profile: { name: 'Updated User', status: 'active' }, wallet: { balance: 500, currency: 'BDT' }, personal: { city: 'Chittagong' } }, null, 2) } });
+  const nameField = await screen.findByLabelText('profile / name');
+  fireEvent.change(nameField, { target: { value: 'Updated User' } });
+  fireEvent.change(screen.getByLabelText('wallet / balance'), { target: { value: '500' } });
+  fireEvent.change(screen.getByLabelText('personal / city'), { target: { value: 'Chittagong' } });
+  expect(screen.queryByLabelText('User data JSON')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
   await waitFor(() => expect(adminApi).toHaveBeenCalledWith('updateUser', {

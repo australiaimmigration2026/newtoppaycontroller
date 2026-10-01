@@ -20,6 +20,23 @@ const date = v => v ? new Date(v).toLocaleString('en-US', { dateStyle: 'medium',
 const money = (v, currency) => v == null ? '—' : `${Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 })}${currency ? ` ${currency}` : ''}`;
 function Badge({ children }) { const s = String(children || '').toLowerCase(); return <span className={`badge ${['active', 'verified', 'completed', 'approved'].includes(s) ? 'green' : ['pending', 'under review'].includes(s) ? 'amber' : ''}`}><i/>{children || 'Not provided'}</span>; }
 function Fields({ data }) { const entries = Object.entries(data || {}).filter(([, val]) => val !== undefined); return <dl className="fields">{entries.map(([key, val]) => <div key={key}><dt>{key}</dt><dd>{value(val)}</dd></div>)}</dl>; }
+function setUserValue(data, path, nextValue) {
+  const [key, ...remaining] = path;
+  const updated = Array.isArray(data) ? [...data] : { ...data };
+  updated[key] = remaining.length ? setUserValue(data[key], remaining, nextValue) : nextValue;
+  return updated;
+}
+function UserValueFields({ data, onChange, path = [] }) {
+  return Object.entries(data || {}).map(([key, fieldValue]) => {
+    const fieldPath = [...path, key];
+    const label = fieldPath.join(' / ');
+    if (fieldValue && typeof fieldValue === 'object' && !(fieldValue instanceof Date)) {
+      return <div className="edit-field-group" key={label}><strong>{label}</strong><UserValueFields data={fieldValue} onChange={onChange} path={fieldPath}/></div>;
+    }
+    const update = nextValue => onChange(fieldPath, nextValue);
+    return <label className="edit-field" key={label}><span>{label}</span>{typeof fieldValue === 'boolean' ? <select aria-label={label} value={String(fieldValue)} onChange={event => update(event.target.value === 'true')}><option value="true">Yes</option><option value="false">No</option></select> : typeof fieldValue === 'number' ? <input aria-label={label} type="number" value={fieldValue} onChange={event => update(event.target.value === '' ? null : Number(event.target.value))}/> : <input aria-label={label} type="text" value={fieldValue == null ? '' : String(fieldValue)} onChange={event => update(event.target.value)}/>}</label>;
+  });
+}
 function Empty({ title, children, icon = 'users' }) { return <div className="empty"><span className="empty-icon"><Icon name={icon} size={27}/></span><h3>{title}</h3><p>{children}</p></div>; }
 function usePage(action, params, enabled) {
   const [cursors, setCursors] = useState([null]);
@@ -66,20 +83,23 @@ function Methods({ uid, kind }) {
   const list = usePage('methods', { uid, kind }, true);
   return <><ListFeedback list={list} noun={kind === 'card' ? 'cards' : 'banks'}/><div className="method-grid">{list.items.map(m => <div className="method" key={m.id}><Icon name="accounts"/><h3>{m.brand || m.bankName || (kind === 'card' ? 'Saved card' : 'Bank account')}</h3><Fields data={m}/><Badge>{m.status}</Badge></div>)}</div>{!list.busy && !list.error && !list.items.length && <Empty title={kind === 'card' ? 'No saved cards' : 'No saved banks'} icon="accounts">No payment methods of this kind were found.</Empty>}<Pager list={list}/></>;
 }
+function Notifications({ uid }) {
+  const list = usePage('notifications', { uid }, true);
+  return <><ListFeedback list={list} noun="notifications"/><div className="method-grid">{list.items.map(notification => <article className="method" key={notification.id}><h3>{notification.title || notification.subject || 'Notification'}</h3><Fields data={notification}/></article>)}</div>{!list.busy && !list.error && !list.items.length && <Empty title="No notifications" icon="requests">No notifications were found for this user.</Empty>}<Pager list={list}/></>;
+}
 function UserDetail({ uid, back, showDetails }) {
   const [tab, setTab] = useState('Profile'); const [data, setData] = useState(null); const [error, setError] = useState(''); const [retry, setRetry] = useState(0);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => { let alive = true; setError(''); adminApi('user', { uid }).then(d => { if (alive) setData(d); }).catch(e => { if (alive) setError(friendlyError(e)); }); return () => { alive = false; }; }, [uid, retry]);
-  useEffect(() => { if (data) setDraft(JSON.stringify(data, null, 2)); }, [data, editorOpen]);
+  useEffect(() => { if (data) setDraft(data); }, [data, editorOpen]);
   const saveUser = async () => {
     setBusy(true); setError('');
     try {
-      const parsed = JSON.parse(draft);
-      await adminApi('updateUser', { uid, data: parsed });
-      setData(parsed);
+      await adminApi('updateUser', { uid, data: draft });
+      setData(draft);
       setEditorOpen(false);
     } catch (e) {
       setError(friendlyError(e));
@@ -99,7 +119,41 @@ function UserDetail({ uid, back, showDetails }) {
       setBusy(false);
     }
   };
-  return <><button className="text-button back" onClick={back}>← Back to users</button><div className="page-heading"><div><div className="eyebrow">USER OVERVIEW</div><h1>{data?.profile?.displayName || data?.profile?.name || 'User details'}</h1><p className="mono">{uid}</p></div>{data && <Badge>{data.profile?.status || 'active'}</Badge>}</div>{error && <div className="error" role="alert">{error} <button onClick={() => setRetry(n => n + 1)}>Try again</button></div>}{!data && !error && <div className="loading">Loading profile…</div>}{data && <><div className="toolbar user-actions"><button className="button" onClick={() => { setDraft(JSON.stringify(data, null, 2)); setEditorOpen(true); }}>Edit all user data</button><button className="button danger" onClick={() => setDeleteOpen(true)}>Delete user</button></div><div className="tabs" role="tablist">{['Profile', 'Balance', 'All transactions', 'Saved cards', 'Saved banks'].map(t => <button role="tab" aria-selected={t === tab} className={t === tab ? 'selected' : ''} key={t} onClick={() => setTab(t)}>{t}</button>)}</div><section className="panel detail-panel"><div className="panel-title"><div><h2>{tab}</h2><p>{tab === 'All transactions' ? 'Full history, newest first. Browse older records using the page controls.' : tab.startsWith('Saved') ? 'Showing raw payment detail values from Firestore.' : 'Account information from Toppay.'}</p></div></div>{tab === 'Profile' && <div className="detail-content"><Fields data={data.profile || {}}/></div>}{tab === 'Balance' && <div className="detail-content"><div className="balance-value">{money(data.wallet?.balance, data.wallet?.currency)}</div><Fields data={data.wallet || {}}/></div>}{tab === 'All transactions' && <TransactionList uid={uid} showDetails={showDetails}/ >}{tab === 'Saved cards' && <Methods key="card" uid={uid} kind="card"/>}{tab === 'Saved banks' && <Methods key="bank" uid={uid} kind="bank"/>}</section></>}>{editorOpen && <Modal title="Edit user data" close={() => setEditorOpen(false)}><div className="modal-copy"><label htmlFor="user-data-json">User data JSON</label><textarea id="user-data-json" aria-label="User data JSON" value={draft} onChange={e => setDraft(e.target.value)} rows={18} style={{ width: '100%', resize: 'vertical' }}/></div><div className="modal-actions"><button className="button" onClick={() => setEditorOpen(false)}>Cancel</button><button className="primary" onClick={saveUser} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button></div></Modal>}{deleteOpen && <Modal title="Delete user" close={() => setDeleteOpen(false)}><div className="modal-copy"><p>Are you sure you want to delete this user and their profile data?</p></div><div className="modal-actions"><button className="button" onClick={() => setDeleteOpen(false)}>Cancel</button><button className="button danger" onClick={deleteUser} disabled={busy}>{busy ? 'Deleting…' : 'Confirm delete'}</button></div></Modal>}</>;
+  return <>
+    <button className="text-button back" onClick={back}>← Back to users</button>
+    <div className="page-heading">
+      <div><div className="eyebrow">USER OVERVIEW</div><h1>{data?.profile?.displayName || data?.profile?.name || 'User details'}</h1><p className="mono">{uid}</p></div>
+      {data && <Badge>{data.profile?.status || 'active'}</Badge>}
+    </div>
+    {error && <div className="error" role="alert">{error} <button onClick={() => setRetry(n => n + 1)}>Try again</button></div>}
+    {!data && !error && <div className="loading">Loading profile…</div>}
+    {data && <>
+      <div className="toolbar user-actions">
+        <button className="button" onClick={() => { setDraft(data); setEditorOpen(true); }}>Edit all user data</button>
+        <button className="button danger" onClick={() => setDeleteOpen(true)}>Delete user</button>
+      </div>
+      <div className="tabs" role="tablist">{['Profile', 'Balance', 'All transactions', 'Saved cards', 'Saved banks', 'Notifications'].map(t => <button role="tab" aria-selected={t === tab} className={t === tab ? 'selected' : ''} key={t} onClick={() => setTab(t)}>{t}</button>)}</div>
+      <section className="panel detail-panel">
+        <div className="panel-title"><div><h2>{tab}</h2><p>{tab === 'All transactions' ? 'Full history, newest first. Browse older records using the page controls.' : tab.startsWith('Saved') ? 'Showing raw payment detail values from Firestore.' : 'Account information from Toppay.'}</p></div></div>
+        {tab === 'Profile' && <div className="detail-content"><Fields data={data.profile || {}}/></div>}
+        {tab === 'Balance' && <div className="detail-content"><div className="balance-value">{money(data.wallet?.balance, data.wallet?.currency)}</div><Fields data={data.wallet || {}}/></div>}
+        {tab === 'All transactions' && <TransactionList uid={uid} showDetails={showDetails}/>}
+        {tab === 'Saved cards' && <Methods key="card" uid={uid} kind="card"/>}
+        {tab === 'Saved banks' && <Methods key="bank" uid={uid} kind="bank"/>}
+        {tab === 'Notifications' && <Notifications uid={uid}/>}
+      </section>
+    </>}
+    {editorOpen && <Modal title="Edit user data" close={() => setEditorOpen(false)}>
+      <div className="user-editor">
+        {['profile', 'wallet', 'personal'].map(section => <section className="edit-section" key={section}>
+          <h3>{section === 'personal' ? 'Personal information' : section[0].toUpperCase() + section.slice(1)}</h3>
+          <div className="edit-fields"><UserValueFields data={draft?.[section] || {}} path={[section]} onChange={(fieldPath, nextValue) => setDraft(current => setUserValue(current, fieldPath, nextValue))}/></div>
+        </section>)}
+      </div>
+      <div className="modal-actions"><button className="button" onClick={() => setEditorOpen(false)}>Cancel</button><button className="primary" onClick={saveUser} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button></div>
+    </Modal>}
+    {deleteOpen && <Modal title="Delete user" close={() => setDeleteOpen(false)}><div className="modal-copy"><p>Are you sure you want to delete this user and their profile data?</p></div><div className="modal-actions"><button className="button" onClick={() => setDeleteOpen(false)}>Cancel</button><button className="button danger" onClick={deleteUser} disabled={busy}>{busy ? 'Deleting…' : 'Confirm delete'}</button></div></Modal>}
+  </>;
 }
 const sections = { users: ['Users', 'Your community, all in one place.'], requests: ['Transaction requests', 'Inspect submitted requests and open their linked user transaction.'], accounts: ['Payment accounts', 'App payment destinations, with account numbers masked.'], bonuses: ['Bonus settings', 'Current send money and cash out bonus configuration.'] };
 function OtherSection({ section, enabled, connect, openUser, showDetails }) {

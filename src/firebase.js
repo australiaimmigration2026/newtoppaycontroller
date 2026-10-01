@@ -139,6 +139,10 @@ async function directAdminApi(action, payload = {}) {
       const snapshot = await getDocs(q);
       return { items: snapshot.docs.map(docSnap => transactionDocToSummary(docSnap.id, docSnap.data())), nextCursor: null };
     }
+    case 'notifications': {
+      const snapshot = await getDocs(query(collection(db, 'users', payload.uid, 'notifications'), limit(20)));
+      return { items: snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })), nextCursor: null };
+    }
     case 'transaction': {
       const uid = payload.uid;
       const transactionId = payload.transactionId;
