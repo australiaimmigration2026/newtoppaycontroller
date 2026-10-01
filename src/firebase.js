@@ -3,6 +3,7 @@ import { getAuth } from 'firebase/auth';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -10,6 +11,7 @@ import {
   limit,
   orderBy,
   query,
+  setDoc,
   where,
 } from 'firebase/firestore';
 
@@ -142,7 +144,38 @@ async function directAdminApi(action, payload = {}) {
       const transactionId = payload.transactionId;
       const snap = await getDoc(doc(db, 'users', uid, 'transactions', transactionId));
       if (!snap.exists()) throw directError('not-found', 'Transaction not found.');
-      return transactionDocToSummary(transactionId, snap.data());
+      const raw = snap.data() || {};
+      return {
+        ...raw,
+        id: raw.id ?? transactionId,
+        uid: raw.uid ?? uid,
+      };
+    }
+    case 'updateUser': {
+      const uid = payload.uid;
+      const data = payload.data || {};
+      const userSnap = await getDoc(doc(db, 'users', uid));
+      if (!userSnap.exists()) throw directError('not-found', 'User not found.');
+      const currentUser = userSnap.data() || {};
+      if (data.profile) await setDoc(doc(db, 'users', uid), { ...currentUser, ...data.profile }, { merge: true });
+      if (data.wallet) {
+        const walletSnap = await getDoc(doc(db, 'users', uid, 'wallet', 'summary'));
+        await setDoc(doc(db, 'users', uid, 'wallet', 'summary'), { ...(walletSnap.exists() ? walletSnap.data() : {}), ...data.wallet }, { merge: true });
+      }
+      if (data.personal) {
+        const personalSnap = await getDoc(doc(db, 'users', uid, 'personalInformation', 'profile'));
+        await setDoc(doc(db, 'users', uid, 'personalInformation', 'profile'), { ...(personalSnap.exists() ? personalSnap.data() : {}), ...data.personal }, { merge: true });
+      }
+      return { ok: true };
+    }
+    case 'deleteUser': {
+      const uid = payload.uid;
+      const userSnap = await getDoc(doc(db, 'users', uid));
+      if (!userSnap.exists()) throw directError('not-found', 'User not found.');
+      await deleteDoc(doc(db, 'users', uid));
+      try { await deleteDoc(doc(db, 'users', uid, 'wallet', 'summary')); } catch (error) {}
+      try { await deleteDoc(doc(db, 'users', uid, 'personalInformation', 'profile')); } catch (error) {}
+      return { ok: true };
     }
     case 'methods': {
       const uid = payload.uid;

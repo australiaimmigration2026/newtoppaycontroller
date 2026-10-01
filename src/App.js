@@ -19,7 +19,7 @@ const value = v => v === null || v === undefined || v === '' ? 'Not provided' : 
 const date = v => v ? new Date(v).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : 'Not provided';
 const money = (v, currency) => v == null ? '—' : `${Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 })}${currency ? ` ${currency}` : ''}`;
 function Badge({ children }) { const s = String(children || '').toLowerCase(); return <span className={`badge ${['active', 'verified', 'completed', 'approved'].includes(s) ? 'green' : ['pending', 'under review'].includes(s) ? 'amber' : ''}`}><i/>{children || 'Not provided'}</span>; }
-function Fields({ data }) { return <dl className="fields">{Object.entries(data).map(([key, val]) => <div key={key}><dt>{key}</dt><dd>{value(val)}</dd></div>)}</dl>; }
+function Fields({ data }) { const entries = Object.entries(data || {}).filter(([, val]) => val !== undefined); return <dl className="fields">{entries.map(([key, val]) => <div key={key}><dt>{key}</dt><dd>{value(val)}</dd></div>)}</dl>; }
 function Empty({ title, children, icon = 'users' }) { return <div className="empty"><span className="empty-icon"><Icon name={icon} size={27}/></span><h3>{title}</h3><p>{children}</p></div>; }
 function usePage(action, params, enabled) {
   const [cursors, setCursors] = useState([null]);
@@ -68,8 +68,38 @@ function Methods({ uid, kind }) {
 }
 function UserDetail({ uid, back, showDetails }) {
   const [tab, setTab] = useState('Profile'); const [data, setData] = useState(null); const [error, setError] = useState(''); const [retry, setRetry] = useState(0);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   useEffect(() => { let alive = true; setError(''); adminApi('user', { uid }).then(d => { if (alive) setData(d); }).catch(e => { if (alive) setError(friendlyError(e)); }); return () => { alive = false; }; }, [uid, retry]);
-  return <><button className="text-button back" onClick={back}>← Back to users</button><div className="page-heading"><div><div className="eyebrow">USER OVERVIEW</div><h1>{data?.profile?.displayName || data?.profile?.name || 'User details'}</h1><p className="mono">{uid}</p></div>{data && <Badge>{data.profile?.status || 'active'}</Badge>}</div>{error && <div className="error" role="alert">{error} <button onClick={() => setRetry(n => n + 1)}>Try again</button></div>}{!data && !error && <div className="loading">Loading profile…</div>}{data && <><div className="tabs" role="tablist">{['Profile', 'Balance', 'All transactions', 'Saved cards', 'Saved banks'].map(t => <button role="tab" aria-selected={t === tab} className={t === tab ? 'selected' : ''} key={t} onClick={() => setTab(t)}>{t}</button>)}</div><section className="panel detail-panel"><div className="panel-title"><div><h2>{tab}</h2><p>{tab === 'All transactions' ? 'Full history, newest first. Browse older records using the page controls.' : tab.startsWith('Saved') ? 'Showing raw payment detail values from Firestore.' : 'Account information from Toppay.'}</p></div></div>{tab === 'Profile' && <div className="detail-content"><Fields data={data.profile || {}}/></div>}{tab === 'Balance' && <div className="detail-content"><div className="balance-value">{money(data.wallet?.balance, data.wallet?.currency)}</div><Fields data={data.wallet || {}}/></div>}{tab === 'All transactions' && <TransactionList uid={uid} showDetails={showDetails}/ >}{tab === 'Saved cards' && <Methods key="card" uid={uid} kind="card"/>}{tab === 'Saved banks' && <Methods key="bank" uid={uid} kind="bank"/>}</section></>}</>;
+  useEffect(() => { if (data) setDraft(JSON.stringify(data, null, 2)); }, [data, editorOpen]);
+  const saveUser = async () => {
+    setBusy(true); setError('');
+    try {
+      const parsed = JSON.parse(draft);
+      await adminApi('updateUser', { uid, data: parsed });
+      setData(parsed);
+      setEditorOpen(false);
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const deleteUser = async () => {
+    setBusy(true); setError('');
+    try {
+      await adminApi('deleteUser', { uid });
+      setDeleteOpen(false);
+      back();
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <><button className="text-button back" onClick={back}>← Back to users</button><div className="page-heading"><div><div className="eyebrow">USER OVERVIEW</div><h1>{data?.profile?.displayName || data?.profile?.name || 'User details'}</h1><p className="mono">{uid}</p></div>{data && <Badge>{data.profile?.status || 'active'}</Badge>}</div>{error && <div className="error" role="alert">{error} <button onClick={() => setRetry(n => n + 1)}>Try again</button></div>}{!data && !error && <div className="loading">Loading profile…</div>}{data && <><div className="toolbar user-actions"><button className="button" onClick={() => { setDraft(JSON.stringify(data, null, 2)); setEditorOpen(true); }}>Edit all user data</button><button className="button danger" onClick={() => setDeleteOpen(true)}>Delete user</button></div><div className="tabs" role="tablist">{['Profile', 'Balance', 'All transactions', 'Saved cards', 'Saved banks'].map(t => <button role="tab" aria-selected={t === tab} className={t === tab ? 'selected' : ''} key={t} onClick={() => setTab(t)}>{t}</button>)}</div><section className="panel detail-panel"><div className="panel-title"><div><h2>{tab}</h2><p>{tab === 'All transactions' ? 'Full history, newest first. Browse older records using the page controls.' : tab.startsWith('Saved') ? 'Showing raw payment detail values from Firestore.' : 'Account information from Toppay.'}</p></div></div>{tab === 'Profile' && <div className="detail-content"><Fields data={data.profile || {}}/></div>}{tab === 'Balance' && <div className="detail-content"><div className="balance-value">{money(data.wallet?.balance, data.wallet?.currency)}</div><Fields data={data.wallet || {}}/></div>}{tab === 'All transactions' && <TransactionList uid={uid} showDetails={showDetails}/ >}{tab === 'Saved cards' && <Methods key="card" uid={uid} kind="card"/>}{tab === 'Saved banks' && <Methods key="bank" uid={uid} kind="bank"/>}</section></>}>{editorOpen && <Modal title="Edit user data" close={() => setEditorOpen(false)}><div className="modal-copy"><label htmlFor="user-data-json">User data JSON</label><textarea id="user-data-json" aria-label="User data JSON" value={draft} onChange={e => setDraft(e.target.value)} rows={18} style={{ width: '100%', resize: 'vertical' }}/></div><div className="modal-actions"><button className="button" onClick={() => setEditorOpen(false)}>Cancel</button><button className="primary" onClick={saveUser} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button></div></Modal>}{deleteOpen && <Modal title="Delete user" close={() => setDeleteOpen(false)}><div className="modal-copy"><p>Are you sure you want to delete this user and their profile data?</p></div><div className="modal-actions"><button className="button" onClick={() => setDeleteOpen(false)}>Cancel</button><button className="button danger" onClick={deleteUser} disabled={busy}>{busy ? 'Deleting…' : 'Confirm delete'}</button></div></Modal>}</>;
 }
 const sections = { users: ['Users', 'Your community, all in one place.'], requests: ['Transaction requests', 'Inspect submitted requests and open their linked user transaction.'], accounts: ['Payment accounts', 'App payment destinations, with account numbers masked.'], bonuses: ['Bonus settings', 'Current send money and cash out bonus configuration.'] };
 function OtherSection({ section, enabled, connect, openUser, showDetails }) {
@@ -86,10 +116,21 @@ function Login({ close }) {
   const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   return <Modal title="Welcome to Toppay" close={close}><p className="modal-copy">Sign in with your verified administrator account.</p><form onSubmit={async e => { e.preventDefault(); setBusy(true); setError(''); try { await signInWithEmailAndPassword(auth, email, password); close(); } catch (err) { setError(friendlyError(err)); } finally { setBusy(false); } }}><label className="form-label">Email address<input type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)}/></label><label className="form-label">Password<input type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)}/></label>{error && <div className="error" role="alert">{error}</div>}<button className="primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in securely →'}</button></form></Modal>;
 }
+const transactionFieldOrder = [
+  'amount', 'balanceApplied', 'balanceImpact', 'bonus', 'createdAt', 'createdAtText', 'currency',
+  'direction', 'fee', 'id', 'method', 'paymentCardBillingZip', 'paymentCardExpiryMonth',
+  'paymentCardExpiryYear', 'paymentCardNumber', 'paymentCardholderName', 'paymentSourceLabel',
+  'paymentSourceMasked', 'paymentSourceType', 'requestId', 'status', 'title', 'totalDebit',
+  'type', 'uid', 'updatedAt'
+];
 function TransactionModal({ target, close }) {
   const [data, setData] = useState(null); const [error, setError] = useState('');
   useEffect(() => { let alive = true; adminApi('transaction', target).then(d => { if (alive) setData(d); }).catch(e => { if (alive) setError(friendlyError(e)); }); return () => { alive = false; }; }, [target]);
-  return <Modal title="Transaction details" close={close}>{error ? <div className="error" role="alert">{error}</div> : !data ? <p>Loading transaction…</p> : <><div className="transaction-amount">{money(data.amount, data.currency)} <Badge>{data.status}</Badge></div><Fields data={{ 'Transaction ID': data.id, 'User UID': target.uid, Type: data.type, Fee: money(data.fee, data.currency), Created: date(data.createdAt), Updated: date(data.updatedAt) }}/><div className="notice">Sensitive payment credentials are excluded from this view.</div></>}</Modal>;
+  const orderedData = data ? Object.fromEntries([
+    ...transactionFieldOrder.filter(key => key in (data || {})).map(key => [key, data[key]]),
+    ...Object.entries(data || {}).filter(([key]) => !transactionFieldOrder.includes(key))
+  ]) : {};
+  return <Modal title="Transaction details" close={close}>{error ? <div className="error" role="alert">{error}</div> : !data ? <p>Loading transaction…</p> : <><div className="transaction-amount">{money(data.amount, data.currency)} <Badge>{data.status}</Badge></div><Fields data={orderedData}/></>}</Modal>;
 }
 export default function App() {
   const [section, setSection] = useState('users'); const [uid, setUid] = useState(null); const [session, setSession] = useState(null); const [checking, setChecking] = useState(false); const [accessError, setAccessError] = useState(''); const [modal, setModal] = useState(null); const [transaction, setTransaction] = useState(null);
