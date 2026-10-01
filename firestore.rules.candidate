@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Backend-only baseline. Admin SDK access is authorized inside the callable.
+    // Do not deploy over the mobile app's rules without auditing and migrating
+    // its direct reads/writes. Rules cannot redact fields within a document.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

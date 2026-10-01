@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "toppay-2bd66",
+    "staging": "toppay-2bd66"
+  },
+  "targets": {},
+  "etags": {}
+}
