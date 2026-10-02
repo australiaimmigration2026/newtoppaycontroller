@@ -145,7 +145,10 @@ function UserDetail({ uid, back, showDetails }) {
     <button className="text-button back" onClick={back}>← Back to users</button>
     <div className="page-heading">
       <div><div className="eyebrow">USER OVERVIEW</div><h1>{data?.profile?.displayName || data?.profile?.name || 'User details'}</h1><p className="mono">{uid}</p></div>
-      {data && <Badge>{data.profile?.status || 'active'}</Badge>}
+      <div className="toolbar user-actions">
+        {data && <Badge>{data.profile?.status || 'active'}</Badge>}
+        <button className="button" onClick={() => setRetry(n => n + 1)} disabled={!data && !error}><Icon name="refresh" size={16}/> Refresh user</button>
+      </div>
     </div>
     {error && <div className="error" role="alert">{error} <button onClick={() => setRetry(n => n + 1)}>Try again</button></div>}
     {!data && !error && <div className="loading">Loading profile…</div>}
