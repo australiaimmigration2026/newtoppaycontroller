@@ -25,6 +25,15 @@ function method(id, data = {}) {
 function transaction(id, data = {}) {
   return { id, ...fields(data, ['uid', 'type', 'status', 'currency']), amount: number(data.amount), fee: number(data.fee), createdAt: date(data.createdAt), updatedAt: date(data.updatedAt) };
 }
-function account(id, data = {}) { return { id, ...fields(data, ['name', 'bankName', 'type', 'currency', 'status']), last4: lastFour(data.accountNumber) }; }
+function account(id, data = {}) {
+  const accountNumber = text(data.number ?? data.accountNumber);
+  return {
+    id,
+    provider: text(data.provider ?? id),
+    ...fields(data, ['name', 'bankName', 'type', 'currency', 'status']),
+    number: accountNumber,
+    last4: lastFour(data.number ?? data.accountNumber),
+  };
+}
 function bonus(id, data = {}) { return { id, enabled: typeof data.enabled === 'boolean' ? data.enabled : null, amount: number(data.amount), percentage: number(data.percentage), currency: text(data.currency) }; }
 module.exports = { profile, wallet, personal, method, transaction, account, bonus };

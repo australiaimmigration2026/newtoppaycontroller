@@ -71,12 +71,16 @@ const transactionDocToSummary = (id, data = {}) => ({
 
 const accountDocToSummary = (id, data = {}) => ({
   id,
+  provider: valueText(data.provider ?? id ?? null),
   name: valueText(data.name ?? null),
   bankName: valueText(data.bankName ?? null),
   type: valueText(data.type ?? null),
   currency: valueText(data.currency ?? null),
   status: valueText(data.status ?? null),
-  last4: typeof data.accountNumber === 'string' ? data.accountNumber.replace(/\D/g, '').slice(-4) : null,
+  number: valueText(data.number ?? data.accountNumber ?? data.account ?? null),
+  last4: typeof (data.number ?? data.accountNumber ?? data.account) === 'string'
+    ? String(data.number ?? data.accountNumber ?? data.account).replace(/\D/g, '').slice(-4)
+    : null,
 });
 
 const bonusDocToSummary = (id, data = {}) => ({
@@ -289,8 +293,22 @@ async function directAdminApi(action, payload = {}) {
       return { items: snapshot.docs.map(docSnap => transactionDocToSummary(docSnap.id, docSnap.data())), nextCursor: null };
     }
     case 'accounts': {
-      const snapshot = await getDocs(query(collection(db, 'account'), limit(20)));
-      return { items: snapshot.docs.map(docSnap => accountDocToSummary(docSnap.id, docSnap.data())), nextCursor: null };
+      const providers = ['bkash', 'nagad', 'rocket'];
+      const documents = await Promise.all(providers.map(async provider => {
+        const snap = await getDoc(doc(db, 'account', provider));
+        return snap.exists() ? { id: provider, ...snap.data() } : null;
+      }));
+      return { items: documents.filter(Boolean).map(account => accountDocToSummary(account.id, account)), nextCursor: null };
+    }
+    case 'updateAccount': {
+      const provider = String(payload.provider || '').toLowerCase();
+      if (!['bkash', 'nagad', 'rocket'].includes(provider)) throw directError('invalid-argument', 'Choose a valid payment account provider.');
+      const data = { ...(payload.data || {}) };
+      delete data.id;
+      delete data.provider;
+      const accountRef = doc(db, 'account', provider);
+      await setDoc(accountRef, data, { merge: true });
+      return { ok: true };
     }
     case 'bonuses': {
       const results = [];

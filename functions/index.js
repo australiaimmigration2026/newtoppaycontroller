@@ -153,7 +153,20 @@ exports.toppayAdminApi = onCall({ region: 'us-central1', maxInstances: 10 }, asy
       return page(db.collection(`users/${id(input.uid)}/paymentMethods`).where('kind', '==', input.kind), input.cursor, safe.method);
     }
     case 'requests': return page(db.collection('transactionRequests'), input.cursor, safe.transaction);
-    case 'accounts': return page(db.collection('account'), input.cursor, safe.account);
+    case 'accounts': {
+      const providers = ['bkash', 'nagad', 'rocket'];
+      const docs = await Promise.all(providers.map(provider => db.doc(`account/${provider}`).get()));
+      return { items: docs.filter(doc => doc.exists).map(doc => safe.account(doc.id, doc.data())), nextCursor: null };
+    }
+    case 'updateAccount': {
+      const provider = id(input.provider).toLowerCase();
+      if (!['bkash', 'nagad', 'rocket'].includes(provider)) throw new HttpsError('invalid-argument', 'Choose a valid payment account provider.');
+      const data = { ...(input.data || {}) };
+      delete data.id;
+      delete data.provider;
+      await db.doc(`account/${provider}`).set(data, { merge: true });
+      return { ok: true };
+    }
     case 'bonuses': {
       const docs = await Promise.all(['sendmoney', 'cashout'].map(key => db.doc(`bonus/${key}`).get()));
       return { items: docs.map(doc => safe.bonus(doc.id, doc.data())) };

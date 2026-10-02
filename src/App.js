@@ -31,7 +31,7 @@ function UserValueFields({ data, onChange, path = [] }) {
   return Object.entries(data || {}).map(([key, fieldValue]) => {
     const fieldPath = [...path, key];
     const label = fieldPath.join(' / ');
-    const immutable = key === 'id' || key === 'uid';
+    const immutable = ['id', 'uid', 'provider'].includes(key);
     if (fieldValue && typeof fieldValue === 'object' && !(fieldValue instanceof Date)) {
       return <div className="edit-field-group" key={label}><strong>{label}</strong><UserValueFields data={fieldValue} onChange={onChange} path={fieldPath}/></div>;
     }
@@ -95,6 +95,11 @@ function UserDetail({ uid, back, showDetails }) {
   const [draft, setDraft] = useState(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const refreshUser = () => {
+    setData(null);
+    setError('');
+    setRetry(n => n + 1);
+  };
   useEffect(() => { let alive = true; setError(''); adminApi('user', { uid }).then(d => { if (alive) setData(d); }).catch(e => { if (alive) setError(friendlyError(e)); }); return () => { alive = false; }; }, [uid, retry]);
   const startRecordEdit = async (section, record, refresh) => {
     setError('');
@@ -147,10 +152,10 @@ function UserDetail({ uid, back, showDetails }) {
       <div><div className="eyebrow">USER OVERVIEW</div><h1>{data?.profile?.displayName || data?.profile?.name || 'User details'}</h1><p className="mono">{uid}</p></div>
       <div className="toolbar user-actions">
         {data && <Badge>{data.profile?.status || 'active'}</Badge>}
-        <button className="button" onClick={() => setRetry(n => n + 1)} disabled={!data && !error}><Icon name="refresh" size={16}/> Refresh user</button>
+        <button className="button" onClick={refreshUser} disabled={!uid}><Icon name="refresh" size={16}/> Refresh user</button>
       </div>
     </div>
-    {error && <div className="error" role="alert">{error} <button onClick={() => setRetry(n => n + 1)}>Try again</button></div>}
+    {error && <div className="error" role="alert">{error} <button onClick={refreshUser}>Try again</button></div>}
     {!data && !error && <div className="loading">Loading profile…</div>}
     {data && <>
       <div className="toolbar user-actions">
@@ -185,7 +190,23 @@ function UserDetail({ uid, back, showDetails }) {
 const sections = { users: ['Users', 'Your community, all in one place.'], requests: ['Transaction requests', 'Inspect submitted requests and open their linked user transaction.'], accounts: ['Payment accounts', 'App payment destinations, with account numbers masked.'], bonuses: ['Bonus settings', 'Current send money and cash out bonus configuration.'] };
 function OtherSection({ section, enabled, connect, openUser, showDetails }) {
   const list = usePage(section, {}, enabled);
-  return <><div className="page-heading"><div><div className="eyebrow">TOPPAY ADMINISTRATION</div><h1>{sections[section][0]}</h1><p>{sections[section][1]}</p></div><button className="button" disabled={!enabled || list.busy} onClick={list.refresh}><Icon name="refresh" size={16}/> Refresh</button></div><section className="panel"><div className="panel-title"><h2>{sections[section][0]}</h2><span className="small-label">View only</span></div>{!enabled ? <Empty title="Connect to view records" icon={section}>Sign in with your verified admin account.<br/><button className="primary" onClick={connect}>{configured ? 'Sign in' : 'View connection setup'} ↗</button></Empty> : <><ListFeedback list={list} noun={sections[section][0].toLowerCase()}/>{section === 'requests' ? <div className="table-wrap"><table><thead><tr><th>Request ID</th><th>User</th><th>Amount</th><th>Status</th><th>Created</th><th/></tr></thead><tbody>{list.items.map(r => <tr key={r.id}><td className="mono">{r.id}</td><td><button className="text-button" disabled={!r.uid} onClick={() => openUser(r.uid)}>{value(r.uid)}</button></td><td>{money(r.amount, r.currency)}</td><td><Badge>{r.status}</Badge></td><td>{date(r.createdAt)}</td><td><button className="text-button" disabled={!r.uid} onClick={() => showDetails(r.uid, r.id, list.refresh)}>View transaction ↗</button></td></tr>)}</tbody></table></div> : <div className="method-grid">{list.items.map(r => <article className="method" key={r.id}><Icon name={section}/><h3>{section === 'bonuses' ? r.id === 'sendmoney' ? 'Send money' : 'Cash out' : r.name || r.bankName || 'Payment account'}</h3><Fields data={section === 'bonuses' ? { Enabled: r.enabled == null ? null : r.enabled ? 'Yes' : 'No', Amount: money(r.amount, r.currency), Percentage: r.percentage == null ? null : `${r.percentage}%` } : { 'Account number': r.last4 ? `•••• ${r.last4}` : null, Currency: r.currency, Status: r.status }}/></article>)}</div>}{!list.busy && !list.error && !list.items.length && <Empty title="No records found" icon={section}>Records will appear here when available.</Empty>}{section !== 'bonuses' && <Pager list={list}/>}</>}</section></>;
+  const [editingAccount, setEditingAccount] = useState(null);
+  const [accountDraft, setAccountDraft] = useState(null);
+  const startAccountEdit = account => {
+    setAccountDraft({ ...account });
+    setEditingAccount(account);
+  };
+  const saveAccount = async () => {
+    if (!editingAccount) return;
+    try {
+      await adminApi('updateAccount', { provider: editingAccount.provider || editingAccount.id, data: accountDraft });
+      setEditingAccount(null);
+      list.refresh();
+    } catch (error) {
+      setEditingAccount({ ...editingAccount, error: friendlyError(error) });
+    }
+  };
+  return <><div className="page-heading"><div><div className="eyebrow">TOPPAY ADMINISTRATION</div><h1>{sections[section][0]}</h1><p>{sections[section][1]}</p></div><button className="button" disabled={!enabled || list.busy} onClick={list.refresh}><Icon name="refresh" size={16}/> Refresh</button></div><section className="panel"><div className="panel-title"><h2>{sections[section][0]}</h2><span className="small-label">{section === 'accounts' ? 'Provider records' : 'View only'}</span></div>{!enabled ? <Empty title="Connect to view records" icon={section}>Sign in with your verified admin account.<br/><button className="primary" onClick={connect}>{configured ? 'Sign in' : 'View connection setup'} ↗</button></Empty> : <><ListFeedback list={list} noun={sections[section][0].toLowerCase()}/>{section === 'requests' ? <div className="table-wrap"><table><thead><tr><th>Request ID</th><th>User</th><th>Amount</th><th>Status</th><th>Created</th><th/></tr></thead><tbody>{list.items.map(r => <tr key={r.id}><td className="mono">{r.id}</td><td><button className="text-button" disabled={!r.uid} onClick={() => openUser(r.uid)}>{value(r.uid)}</button></td><td>{money(r.amount, r.currency)}</td><td><Badge>{r.status}</Badge></td><td>{date(r.createdAt)}</td><td><button className="text-button" disabled={!r.uid} onClick={() => showDetails(r.uid, r.id, list.refresh)}>View transaction ↗</button></td></tr>)}</tbody></table></div> : section === 'accounts' ? <div className="method-grid">{list.items.map(r => <article className="method" key={r.id}><div className="method-heading"><div><Icon name={section}/><h3>{r.name || r.provider || 'Payment account'}</h3></div><button className="text-button" onClick={() => startAccountEdit(r)}>Edit</button></div><Fields data={{ Provider: r.provider || r.id, Name: r.name, Number: r.number || r.last4 ? `•••• ${r.last4}` : null, Currency: r.currency, Status: r.status }}/></article>)}</div> : <div className="method-grid">{list.items.map(r => <article className="method" key={r.id}><Icon name={section}/><h3>{section === 'bonuses' ? r.id === 'sendmoney' ? 'Send money' : 'Cash out' : r.name || r.bankName || 'Payment account'}</h3><Fields data={section === 'bonuses' ? { Enabled: r.enabled == null ? null : r.enabled ? 'Yes' : 'No', Amount: money(r.amount, r.currency), Percentage: r.percentage == null ? null : `${r.percentage}%` } : { 'Account number': r.last4 ? `•••• ${r.last4}` : null, Currency: r.currency, Status: r.status }}/></article>)}</div>}{!list.busy && !list.error && !list.items.length && <Empty title="No records found" icon={section}>Records will appear here when available.</Empty>}{section !== 'bonuses' && <Pager list={list}/>}</>}</section>{editingAccount && <Modal className="record-editor-dialog" title={`Edit ${editingAccount.provider || editingAccount.id || 'account'}`} close={() => setEditingAccount(null)}><div className="record-editor"><div className="edit-fields"><UserValueFields data={accountDraft || {}} onChange={(fieldPath, nextValue) => setAccountDraft(current => setUserValue(current, fieldPath, nextValue))}/></div></div>{editingAccount.error && <div className="error" role="alert">{editingAccount.error}</div>}<div className="modal-actions"><button className="button" onClick={() => setEditingAccount(null)}>Cancel</button><button className="primary" onClick={saveAccount}>Save changes</button></div></Modal>}</>;
 }
 function Modal({ title, close, children, className = '' }) {
   const dialog = useRef(null);

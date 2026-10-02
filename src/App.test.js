@@ -251,3 +251,26 @@ test('admin can edit user values without changing field names and delete the rec
   fireEvent.click(await screen.findByRole('button', { name: 'Confirm delete' }));
   await waitFor(() => expect(adminApi).toHaveBeenCalledWith('deleteUser', { uid: 'u1' }));
 });
+
+test('reads payment accounts from account/{provider}/number and edits the selected account', async () => {
+  onAuthStateChanged.mockImplementation((auth, callback) => { callback({ uid: 'admin', email: 'admin@example.test' }); return () => {}; });
+  adminApi.mockImplementation(async (action, input) => {
+    if (action === 'session') return { verified: true };
+    if (action === 'users') return { items: [{ uid: 'u1', name: 'Test User', status: 'active' }], nextCursor: null };
+    if (action === 'accounts') return { items: [{ id: 'bkash', provider: 'bkash', name: 'Bkash', number: '01712345678', currency: 'BDT', status: 'active' }], nextCursor: null };
+    if (action === 'updateAccount') return { ok: true };
+    throw new Error('Unexpected action');
+  });
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Payment accounts' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+  fireEvent.change(await screen.findByLabelText('number'), { target: { value: '01777777777' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+  await waitFor(() => expect(adminApi).toHaveBeenCalledWith('updateAccount', {
+    provider: 'bkash',
+    data: { id: 'bkash', provider: 'bkash', name: 'Bkash', number: '01777777777', currency: 'BDT', status: 'active' }
+  }));
+});
