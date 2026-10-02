@@ -11,6 +11,8 @@ import {
   limit,
   orderBy,
   query,
+  runTransaction,
+  serverTimestamp,
   setDoc,
   where,
 } from 'firebase/firestore';
@@ -91,6 +93,16 @@ function directError(code, message) {
   return error;
 }
 
+const balanceCreditTypes = new Set(['addbalance', 'addbalancerequest', 'balanceadd', 'deposit', 'topup', 'recharge', 'cashin', 'addfunds', 'walletcredit']);
+const balanceDebitTypes = new Set(['sendmoney', 'cashout', 'withdrawal', 'withdraw', 'payout', 'transferout', 'debit', 'payment']);
+const getBalanceDelta = transaction => {
+  const normalizedType = String(transaction?.type || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (balanceCreditTypes.has(normalizedType)) return Number(transaction?.amount ?? 0) || 0;
+  if (balanceDebitTypes.has(normalizedType)) return -(Number(transaction?.amount ?? 0) || 0);
+  return 0;
+};
+const isPendingReview = status => ['pending', 'under review', 'under_review'].includes(String(status || '').toLowerCase());
+
 async function directAdminApi(action, payload = {}) {
   if (!auth || !db) throw new Error('Firebase is not connected.');
   const currentUser = auth.currentUser;
@@ -154,6 +166,67 @@ async function directAdminApi(action, payload = {}) {
         id: raw.id ?? transactionId,
         uid: raw.uid ?? uid,
       };
+    }
+    case 'reviewTransaction': {
+      const { uid, transactionId, decision } = payload;
+      if (!['approved', 'rejected'].includes(decision)) throw directError('invalid-argument', 'Choose approve or reject.');
+      const transactionRef = doc(db, 'users', uid, 'transactions', transactionId);
+      const walletRef = doc(db, 'users', uid, 'wallet', 'summary');
+      return runTransaction(db, async firestoreTransaction => {
+        const transactionSnap = await firestoreTransaction.get(transactionRef);
+        if (!transactionSnap.exists()) throw directError('not-found', 'Transaction not found.');
+        const transactionData = transactionSnap.data() || {};
+        if (!isPendingReview(transactionData.status)) throw directError('failed-precondition', 'This transaction has already been reviewed.');
+        if (transactionData.uid && transactionData.uid !== uid) throw directError('permission-denied', 'This transaction belongs to a different user.');
+        if (transactionData.balanceApplied === true) throw directError('failed-precondition', 'This request has already changed the balance and cannot be reviewed again.');
+
+        const requestId = transactionData.requestId || transactionId;
+        const requestRef = typeof requestId === 'string' && requestId && !requestId.includes('/')
+          ? doc(db, 'transactionRequests', requestId)
+          : null;
+        const requestSnap = requestRef ? await firestoreTransaction.get(requestRef) : null;
+        let walletData = null;
+        let amount = null;
+        let balanceDelta = 0;
+        if (decision === 'approved') {
+          amount = Number(transactionData.amount);
+          if (!Number.isFinite(amount) || amount <= 0) throw directError('failed-precondition', 'The requested amount must be greater than zero.');
+          balanceDelta = getBalanceDelta(transactionData);
+          if (balanceDelta !== 0) {
+            const walletSnap = await firestoreTransaction.get(walletRef);
+            walletData = walletSnap.exists() ? walletSnap.data() || {} : {};
+            if (!Number.isFinite(Number(walletData.balance ?? 0))) throw directError('failed-precondition', 'The current wallet balance is invalid.');
+            if (walletData.currency && transactionData.currency && walletData.currency !== transactionData.currency) {
+              throw directError('failed-precondition', 'The transaction currency does not match the user wallet.');
+            }
+          }
+        }
+        if (requestSnap?.exists()) {
+          const requestData = requestSnap.data() || {};
+          if (requestData.uid && requestData.uid !== uid) throw directError('failed-precondition', 'The linked request belongs to a different user.');
+          if (!isPendingReview(requestData.status)) throw directError('failed-precondition', 'The linked request has already been reviewed.');
+          if (decision === 'approved' && requestData.amount != null && Number(requestData.amount) !== amount) {
+            throw directError('failed-precondition', 'The linked request amount does not match the transaction amount.');
+          }
+        }
+
+        const update = { status: decision, updatedAt: serverTimestamp() };
+        if (decision === 'approved') {
+          update.balanceApplied = balanceDelta !== 0;
+          update.balanceImpact = balanceDelta;
+          if (balanceDelta !== 0) {
+            firestoreTransaction.set(walletRef, {
+              ...walletData,
+              balance: Number(walletData.balance || 0) + balanceDelta,
+              currency: walletData.currency || transactionData.currency || null,
+              updatedAt: serverTimestamp(),
+            }, { merge: true });
+          }
+        }
+        firestoreTransaction.update(transactionRef, update);
+        if (requestSnap?.exists()) firestoreTransaction.update(requestRef, { status: decision, updatedAt: serverTimestamp() });
+        return { status: decision, balanceImpact: decision === 'approved' ? balanceDelta : null };
+      });
     }
     case 'updateUserRecord': {
       const { uid, section, recordId } = payload;
@@ -238,6 +311,7 @@ export async function adminApi(action, payload = {}) {
       const response = await callable({ action, ...payload });
       return response.data;
     } catch (error) {
+      if (action === 'reviewTransaction') throw error;
       if (error?.code === 'permission-denied' || error?.code === 'unauthenticated' || error?.code === 'not-found' || error?.code === 'internal' || error?.code === 'unavailable' || error?.code === 'invalid-argument') {
         return directAdminApi(action, payload);
       }

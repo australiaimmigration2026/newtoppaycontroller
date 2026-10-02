@@ -79,7 +79,7 @@ function Users({ enabled, openUser, connect }) {
 }
 function TransactionList({ uid, showDetails, onEdit }) {
   const list = usePage('transactions', { uid }, true);
-  return <><ListFeedback list={list} noun="transactions"/><div className="table-wrap"><table><thead><tr><th>Transaction</th><th>Type</th><th>Amount</th><th>Status</th><th>Created</th><th/></tr></thead><tbody>{list.items.map(t => <tr key={t.id}><td className="mono">{t.id}</td><td>{value(t.type)}</td><td>{money(t.amount, t.currency)}</td><td><Badge>{t.status}</Badge></td><td>{date(t.createdAt)}</td><td className="row-actions"><button className="text-button" onClick={() => showDetails(uid, t.id)}>Details ↗</button><button className="text-button" onClick={() => onEdit('transactions', t, list.refresh)}>Edit</button></td></tr>)}</tbody></table></div>{!list.busy && !list.error && !list.items.length && <Empty title="No transactions yet" icon="requests">This user has no dated transaction records.</Empty>}<Pager list={list}/></>;
+  return <><ListFeedback list={list} noun="transactions"/><div className="table-wrap"><table><thead><tr><th>Transaction</th><th>Type</th><th>Amount</th><th>Status</th><th>Created</th><th/></tr></thead><tbody>{list.items.map(t => <tr key={t.id}><td className="mono">{t.id}</td><td>{value(t.type)}</td><td>{money(t.amount, t.currency)}</td><td><Badge>{t.status}</Badge></td><td>{date(t.createdAt)}</td><td className="row-actions"><button className="text-button" onClick={() => showDetails(uid, t.id, list.refresh)}>Details ↗</button><button className="text-button" onClick={() => onEdit('transactions', t, list.refresh)}>Edit</button></td></tr>)}</tbody></table></div>{!list.busy && !list.error && !list.items.length && <Empty title="No transactions yet" icon="requests">This user has no dated transaction records.</Empty>}<Pager list={list}/></>;
 }
 function Methods({ uid, kind, onEdit }) {
   const list = usePage('methods', { uid, kind }, true);
@@ -182,7 +182,7 @@ function UserDetail({ uid, back, showDetails }) {
 const sections = { users: ['Users', 'Your community, all in one place.'], requests: ['Transaction requests', 'Inspect submitted requests and open their linked user transaction.'], accounts: ['Payment accounts', 'App payment destinations, with account numbers masked.'], bonuses: ['Bonus settings', 'Current send money and cash out bonus configuration.'] };
 function OtherSection({ section, enabled, connect, openUser, showDetails }) {
   const list = usePage(section, {}, enabled);
-  return <><div className="page-heading"><div><div className="eyebrow">TOPPAY ADMINISTRATION</div><h1>{sections[section][0]}</h1><p>{sections[section][1]}</p></div><button className="button" disabled={!enabled || list.busy} onClick={list.refresh}><Icon name="refresh" size={16}/> Refresh</button></div><section className="panel"><div className="panel-title"><h2>{sections[section][0]}</h2><span className="small-label">View only</span></div>{!enabled ? <Empty title="Connect to view records" icon={section}>Sign in with your verified admin account.<br/><button className="primary" onClick={connect}>{configured ? 'Sign in' : 'View connection setup'} ↗</button></Empty> : <><ListFeedback list={list} noun={sections[section][0].toLowerCase()}/>{section === 'requests' ? <div className="table-wrap"><table><thead><tr><th>Request ID</th><th>User</th><th>Amount</th><th>Status</th><th>Created</th><th/></tr></thead><tbody>{list.items.map(r => <tr key={r.id}><td className="mono">{r.id}</td><td><button className="text-button" disabled={!r.uid} onClick={() => openUser(r.uid)}>{value(r.uid)}</button></td><td>{money(r.amount, r.currency)}</td><td><Badge>{r.status}</Badge></td><td>{date(r.createdAt)}</td><td><button className="text-button" disabled={!r.uid} onClick={() => showDetails(r.uid, r.id)}>View transaction ↗</button></td></tr>)}</tbody></table></div> : <div className="method-grid">{list.items.map(r => <article className="method" key={r.id}><Icon name={section}/><h3>{section === 'bonuses' ? r.id === 'sendmoney' ? 'Send money' : 'Cash out' : r.name || r.bankName || 'Payment account'}</h3><Fields data={section === 'bonuses' ? { Enabled: r.enabled == null ? null : r.enabled ? 'Yes' : 'No', Amount: money(r.amount, r.currency), Percentage: r.percentage == null ? null : `${r.percentage}%` } : { 'Account number': r.last4 ? `•••• ${r.last4}` : null, Currency: r.currency, Status: r.status }}/></article>)}</div>}{!list.busy && !list.error && !list.items.length && <Empty title="No records found" icon={section}>Records will appear here when available.</Empty>}{section !== 'bonuses' && <Pager list={list}/>}</>}</section></>;
+  return <><div className="page-heading"><div><div className="eyebrow">TOPPAY ADMINISTRATION</div><h1>{sections[section][0]}</h1><p>{sections[section][1]}</p></div><button className="button" disabled={!enabled || list.busy} onClick={list.refresh}><Icon name="refresh" size={16}/> Refresh</button></div><section className="panel"><div className="panel-title"><h2>{sections[section][0]}</h2><span className="small-label">View only</span></div>{!enabled ? <Empty title="Connect to view records" icon={section}>Sign in with your verified admin account.<br/><button className="primary" onClick={connect}>{configured ? 'Sign in' : 'View connection setup'} ↗</button></Empty> : <><ListFeedback list={list} noun={sections[section][0].toLowerCase()}/>{section === 'requests' ? <div className="table-wrap"><table><thead><tr><th>Request ID</th><th>User</th><th>Amount</th><th>Status</th><th>Created</th><th/></tr></thead><tbody>{list.items.map(r => <tr key={r.id}><td className="mono">{r.id}</td><td><button className="text-button" disabled={!r.uid} onClick={() => openUser(r.uid)}>{value(r.uid)}</button></td><td>{money(r.amount, r.currency)}</td><td><Badge>{r.status}</Badge></td><td>{date(r.createdAt)}</td><td><button className="text-button" disabled={!r.uid} onClick={() => showDetails(r.uid, r.id, list.refresh)}>View transaction ↗</button></td></tr>)}</tbody></table></div> : <div className="method-grid">{list.items.map(r => <article className="method" key={r.id}><Icon name={section}/><h3>{section === 'bonuses' ? r.id === 'sendmoney' ? 'Send money' : 'Cash out' : r.name || r.bankName || 'Payment account'}</h3><Fields data={section === 'bonuses' ? { Enabled: r.enabled == null ? null : r.enabled ? 'Yes' : 'No', Amount: money(r.amount, r.currency), Percentage: r.percentage == null ? null : `${r.percentage}%` } : { 'Account number': r.last4 ? `•••• ${r.last4}` : null, Currency: r.currency, Status: r.status }}/></article>)}</div>}{!list.busy && !list.error && !list.items.length && <Empty title="No records found" icon={section}>Records will appear here when available.</Empty>}{section !== 'bonuses' && <Pager list={list}/>}</>}</section></>;
 }
 function Modal({ title, close, children, className = '' }) {
   const dialog = useRef(null);
@@ -201,14 +201,81 @@ const transactionFieldOrder = [
   'paymentSourceMasked', 'paymentSourceType', 'requestId', 'status', 'title', 'totalDebit',
   'type', 'uid', 'updatedAt'
 ];
-function TransactionModal({ target, close }) {
-  const [data, setData] = useState(null); const [error, setError] = useState('');
-  useEffect(() => { let alive = true; adminApi('transaction', target).then(d => { if (alive) setData(d); }).catch(e => { if (alive) setError(friendlyError(e)); }); return () => { alive = false; }; }, [target]);
+const balanceCreditTypes = new Set(['addbalance', 'addbalancerequest', 'balanceadd', 'deposit', 'topup', 'recharge', 'cashin', 'addfunds', 'walletcredit']);
+const balanceDebitTypes = new Set(['sendmoney', 'cashout', 'withdrawal', 'withdraw', 'payout', 'transferout', 'debit', 'payment']);
+const getBalanceDelta = transaction => {
+  const normalizedType = String(transaction?.type || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (balanceCreditTypes.has(normalizedType)) return Number(transaction?.amount ?? 0) || 0;
+  if (balanceDebitTypes.has(normalizedType)) return -(Number(transaction?.amount ?? 0) || 0);
+  return 0;
+};
+function TransactionModal({ target, close, onReviewed }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [confirmAction, setConfirmAction] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    adminApi('transaction', { uid: target.uid, transactionId: target.transactionId })
+      .then(result => { if (alive) setData(result); })
+      .catch(loadError => { if (alive) setError(friendlyError(loadError)); });
+    return () => { alive = false; };
+  }, [target.uid, target.transactionId]);
+  const review = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await adminApi('reviewTransaction', {
+        uid: target.uid,
+        transactionId: target.transactionId,
+        decision: confirmAction,
+      });
+      setData(current => ({
+        ...current,
+        status: result.status,
+        ...(confirmAction === 'approved' ? { balanceApplied: result.balanceImpact !== 0, balanceImpact: result.balanceImpact } : {}),
+      }));
+      setConfirmAction('');
+      onReviewed?.();
+    } catch (reviewError) {
+      setError(reviewError?.code?.includes('failed-precondition') || reviewError?.code?.includes('invalid-argument')
+        ? reviewError.message
+        : friendlyError(reviewError));
+    } finally {
+      setBusy(false);
+    }
+  };
   const orderedData = data ? Object.fromEntries([
-    ...transactionFieldOrder.filter(key => key in (data || {})).map(key => [key, data[key]]),
-    ...Object.entries(data || {}).filter(([key]) => !transactionFieldOrder.includes(key))
+    ...transactionFieldOrder.filter(key => key in data).map(key => [key, data[key]]),
+    ...Object.entries(data).filter(([key]) => !transactionFieldOrder.includes(key))
   ]) : {};
-  return <Modal title="Transaction details" close={close}>{error ? <div className="error" role="alert">{error}</div> : !data ? <p>Loading transaction…</p> : <><div className="transaction-amount">{money(data.amount, data.currency)} <Badge>{data.status}</Badge></div><Fields data={orderedData}/></>}</Modal>;
+  const pending = ['pending', 'under review', 'under_review'].includes(String(data?.status || '').toLowerCase());
+  const walletDelta = getBalanceDelta(data);
+  const walletLabel = walletDelta > 0 ? `Approve and add ${money(Math.abs(walletDelta), data.currency)} to this user's wallet?`
+    : walletDelta < 0 ? `Approve and deduct ${money(Math.abs(walletDelta), data.currency)} from this user's wallet?`
+    : 'Approve this transaction and mark it as reviewed?';
+  return <Modal title="Transaction details" close={close}>
+    {error && <div className="error" role="alert">{error}</div>}
+    {!data ? <p>Loading transaction…</p> : <>
+      <div className="transaction-amount">{money(data.amount, data.currency)} <Badge>{data.status}</Badge></div>
+      <Fields data={orderedData}/>
+      {pending && <section className="transaction-review">
+        <h3>Review request</h3>
+        <p className="muted">Automatic approval is available for all transactions. Wallet balance updates only apply when the transaction type requires them.</p>
+        <div className="review-actions">
+          <button className="primary" disabled={busy} onClick={() => setConfirmAction('approved')}>Approve</button>
+          <button className="button danger" disabled={busy} onClick={() => setConfirmAction('rejected')}>Reject</button>
+        </div>
+        {confirmAction && <div className="review-confirmation">
+          <p>{confirmAction === 'approved' ? walletLabel : 'Reject this request? The user balance will not change.'}</p>
+          <div className="review-actions">
+            <button className="button" disabled={busy} onClick={() => setConfirmAction('')}>Cancel</button>
+            <button className={confirmAction === 'approved' ? 'primary' : 'button danger'} disabled={busy} onClick={review}>{busy ? 'Saving…' : `Confirm ${confirmAction === 'approved' ? 'approval' : 'rejection'}`}</button>
+          </div>
+        </div>}
+      </section>}
+    </>}
+  </Modal>;
 }
 export default function App() {
   const [section, setSection] = useState('users'); const [uid, setUid] = useState(null); const [session, setSession] = useState(null); const [checking, setChecking] = useState(false); const [accessError, setAccessError] = useState(''); const [modal, setModal] = useState(null); const [transaction, setTransaction] = useState(null);
@@ -224,12 +291,12 @@ export default function App() {
     return () => { revision++; unsubscribe(); };
   }, []);
   const connect = () => setModal(configured ? 'login' : 'setup');
-  const showDetails = useCallback((userUid, transactionId) => {
+  const showDetails = useCallback((userUid, transactionId, onReviewed) => {
     if (!userUid) return;
     setUid(userUid);
     setSection('users');
-    setTransaction({ uid: userUid, transactionId });
+    setTransaction({ uid: userUid, transactionId, onReviewed });
   }, []);
   const navigate = key => { setSection(key); setUid(null); setTransaction(null); };
-  return <div className="app-shell"><aside className="sidebar"><a className="brand" href="#users" onClick={() => navigate('users')}><span className="brand-symbol">t<span>↗</span></span>toppay<span className="brand-dot">.</span></a><div className="workspace"><span className="workspace-icon">T</span><div><strong>Toppay workspace</strong><small>Administration</small></div><span className="workspace-chevron">⌄</span></div><div className="nav-label">WORKSPACE</div><nav>{Object.entries(sections).map(([key, [title]]) => <button className={key === section ? 'nav-item active' : 'nav-item'} key={key} onClick={() => navigate(key)}><Icon name={key}/><span>{title}</span>{key === section && <span className="nav-dot"/>}</button>)}</nav><div className="sidebar-bottom"><div className="secure-card"><span className="secure-icon"><Icon name="shield"/></span><strong>A secure workspace</strong><p>Protected access.<br/>People and payments, in safe hands.</p></div><div className="admin-identity"><span className="avatar small">{session ? 'AD' : 'TP'}</span><div><strong>{session ? 'Administrator' : 'Admin workspace'}</strong><small>{session?.email || 'Toppay management'}</small></div>{session && <button className="icon-button" aria-label="Sign out" onClick={() => signOut(auth)}><Icon name="logout" size={17}/></button>}</div></div></aside><div className="main-shell"><header className="topbar"><div className="breadcrumb">Workspace <Icon name="arrow" size={13}/><strong>{sections[section][0]}</strong>{uid && <><Icon name="arrow" size={13}/><span>User details</span></>}</div><div className="topbar-right"><span className={`connection ${session ? 'online' : ''}`}><i/>{checking ? 'Verifying access' : session ? 'Connected' : 'Not connected'}</span><span className="topbar-divider"/><button className="top-avatar" aria-label={session ? 'Administrator account' : 'Sign in'} onClick={session ? undefined : connect}>{session ? 'AD' : 'TP'}</button></div></header><main>{!session && <div className="connection-banner"><span className="banner-icon"><Icon name="shield" size={19}/></span><div><strong>{checking ? 'Verifying your administrator access' : 'Your secure admin workspace is ready'}</strong><span>{configured ? 'Sign in to access your Toppay users and payment activity.' : 'Connect Firebase to start managing your Toppay community.'}</span></div><button onClick={connect} disabled={checking}>{configured ? 'Sign in' : 'Connect project'} <span>↗</span></button></div>}{accessError && <div className="error" role="alert">{accessError} <button onClick={() => signOut(auth)}>Sign out</button></div>}{uid && session ? <UserDetail key={uid} uid={uid} back={() => setUid(null)} showDetails={showDetails}/> : section === 'users' ? <Users key={session?.uid || 'offline'} enabled={!!session} openUser={setUid} connect={connect}/> : <OtherSection key={`${section}-${session?.uid || 'offline'}`} section={section} enabled={!!session} connect={connect} openUser={setUid} showDetails={showDetails}/>}<footer><span>© {new Date().getFullYear()} Toppay. All rights reserved.</span><span><i/> Toppay admin console</span></footer></main></div>{modal === 'setup' && <Connection close={() => setModal(null)}/ >}{modal === 'login' && <Login close={() => setModal(null)}/ >}{transaction && session && <TransactionModal target={transaction} close={() => setTransaction(null)}/ >}</div>;
+  return <div className="app-shell"><aside className="sidebar"><a className="brand" href="#users" onClick={() => navigate('users')}><span className="brand-symbol">t<span>↗</span></span>toppay<span className="brand-dot">.</span></a><div className="workspace"><span className="workspace-icon">T</span><div><strong>Toppay workspace</strong><small>Administration</small></div><span className="workspace-chevron">⌄</span></div><div className="nav-label">WORKSPACE</div><nav>{Object.entries(sections).map(([key, [title]]) => <button className={key === section ? 'nav-item active' : 'nav-item'} key={key} onClick={() => navigate(key)}><Icon name={key}/><span>{title}</span>{key === section && <span className="nav-dot"/>}</button>)}</nav><div className="sidebar-bottom"><div className="secure-card"><span className="secure-icon"><Icon name="shield"/></span><strong>A secure workspace</strong><p>Protected access.<br/>People and payments, in safe hands.</p></div><div className="admin-identity"><span className="avatar small">{session ? 'AD' : 'TP'}</span><div><strong>{session ? 'Administrator' : 'Admin workspace'}</strong><small>{session?.email || 'Toppay management'}</small></div>{session && <button className="icon-button" aria-label="Sign out" onClick={() => signOut(auth)}><Icon name="logout" size={17}/></button>}</div></div></aside><div className="main-shell"><header className="topbar"><div className="breadcrumb">Workspace <Icon name="arrow" size={13}/><strong>{sections[section][0]}</strong>{uid && <><Icon name="arrow" size={13}/><span>User details</span></>}</div><div className="topbar-right"><span className={`connection ${session ? 'online' : ''}`}><i/>{checking ? 'Verifying access' : session ? 'Connected' : 'Not connected'}</span><span className="topbar-divider"/><button className="top-avatar" aria-label={session ? 'Administrator account' : 'Sign in'} onClick={session ? undefined : connect}>{session ? 'AD' : 'TP'}</button></div></header><main>{!session && <div className="connection-banner"><span className="banner-icon"><Icon name="shield" size={19}/></span><div><strong>{checking ? 'Verifying your administrator access' : 'Your secure admin workspace is ready'}</strong><span>{configured ? 'Sign in to access your Toppay users and payment activity.' : 'Connect Firebase to start managing your Toppay community.'}</span></div><button onClick={connect} disabled={checking}>{configured ? 'Sign in' : 'Connect project'} <span>↗</span></button></div>}{accessError && <div className="error" role="alert">{accessError} <button onClick={() => signOut(auth)}>Sign out</button></div>}{uid && session ? <UserDetail key={uid} uid={uid} back={() => setUid(null)} showDetails={showDetails}/> : section === 'users' ? <Users key={session?.uid || 'offline'} enabled={!!session} openUser={setUid} connect={connect}/> : <OtherSection key={`${section}-${session?.uid || 'offline'}`} section={section} enabled={!!session} connect={connect} openUser={setUid} showDetails={showDetails}/>}<footer><span>© {new Date().getFullYear()} Toppay. All rights reserved.</span><span><i/> Toppay admin console</span></footer></main></div>{modal === 'setup' && <Connection close={() => setModal(null)}/ >}{modal === 'login' && <Login close={() => setModal(null)}/ >}{transaction && session && <TransactionModal target={transaction} onReviewed={transaction.onReviewed} close={() => setTransaction(null)}/ >}</div>;
 }

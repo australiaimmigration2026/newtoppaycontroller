@@ -96,6 +96,36 @@ test('editing a transaction updates that user transaction document', async () =>
 });
 
 test.each([
+  ['approved', 'add_balance', 'Confirm approval'],
+  ['rejected', 'cashout', 'Confirm rejection'],
+])('can mark a pending transaction %s', async (decision, type, confirmLabel) => {
+  onAuthStateChanged.mockImplementation((auth, callback) => { callback({ uid: 'admin', email: 'admin@example.test' }); return () => {}; });
+  adminApi.mockImplementation(async (action, input) => {
+    if (action === 'session') return { verified: true };
+    if (action === 'users') return { items: [{ uid: 'u1', name: 'Test User', status: 'active' }], nextCursor: null };
+    if (action === 'user') return { profile: { name: 'Test User' }, wallet: {}, personal: {} };
+    if (action === 'transactions') return { items: [{ id: 'tx-review', type, amount: 400, status: 'pending', currency: 'BDT' }], nextCursor: null };
+    if (action === 'transaction') return { id: 'tx-review', uid: 'u1', type, amount: 400, status: 'pending', currency: 'BDT' };
+    if (action === 'reviewTransaction') return { status: input.decision, balanceImpact: input.decision === 'approved' ? 400 : null };
+    throw new Error('Unexpected action');
+  });
+
+  render(<App/>);
+  fireEvent.click(await screen.findByRole('button', { name: /Test User No email/ }));
+  await screen.findByRole('heading', { name: 'Test User' });
+  fireEvent.click(screen.getByRole('tab', { name: 'All transactions' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Details ↗' }));
+  fireEvent.click(await screen.findByRole('button', { name: decision === 'approved' ? 'Approve' : 'Reject' }));
+  if (decision === 'approved') expect(screen.getByText(/add 400 BDT to this user's wallet/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: confirmLabel }));
+
+  await waitFor(() => expect(adminApi).toHaveBeenCalledWith('reviewTransaction', {
+    uid: 'u1', transactionId: 'tx-review', decision
+  }));
+  await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent(decision));
+});
+
+test.each([
   ['Saved cards', 'card', 'card-1'],
   ['Saved banks', 'bank', 'bank-1'],
 ])('%s edits only its selected payment method', async (tab, kind, recordId) => {

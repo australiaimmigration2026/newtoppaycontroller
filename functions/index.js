@@ -1,6 +1,6 @@
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
-const { getFirestore, FieldPath } = require('firebase-admin/firestore');
+const { getFirestore, FieldPath, FieldValue } = require('firebase-admin/firestore');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const safe = require('./sanitize');
 const { requireAdmin } = require('./security');
@@ -10,6 +10,82 @@ function id(value) {
   if (typeof value !== 'string' || !value || value.length > 128 || value.includes('/')) throw new HttpsError('invalid-argument', 'Invalid identifier.');
   return value;
 }
+const balanceCreditTypes = new Set(['addbalance', 'addbalancerequest', 'balanceadd', 'deposit', 'topup', 'recharge', 'cashin', 'addfunds', 'walletcredit']);
+const balanceDebitTypes = new Set(['sendmoney', 'cashout', 'withdrawal', 'withdraw', 'payout', 'transferout', 'debit', 'payment']);
+const getBalanceDelta = transaction => {
+  const normalizedType = String(transaction.type || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (balanceCreditTypes.has(normalizedType)) return Number(transaction.amount ?? 0) || 0;
+  if (balanceDebitTypes.has(normalizedType)) return -(Number(transaction.amount ?? 0) || 0);
+  return 0;
+};
+const isPendingReview = status => ['pending', 'under review', 'under_review'].includes(String(status || '').toLowerCase());
+function createTransactionReviewer(database, timestamp = () => FieldValue.serverTimestamp()) {
+  return async input => {
+    const uid = id(input.uid);
+    const transactionId = id(input.transactionId);
+    const decision = input.decision;
+    if (!['approved', 'rejected'].includes(decision)) throw new HttpsError('invalid-argument', 'Choose approve or reject.');
+
+    const transactionRef = database.doc(`users/${uid}/transactions/${transactionId}`);
+    const walletRef = database.doc(`users/${uid}/wallet/summary`);
+    return database.runTransaction(async firestoreTransaction => {
+    const transactionSnap = await firestoreTransaction.get(transactionRef);
+    if (!transactionSnap.exists) throw new HttpsError('not-found', 'Transaction not found.');
+    const transactionData = transactionSnap.data() || {};
+    if (!isPendingReview(transactionData.status)) throw new HttpsError('failed-precondition', 'This transaction has already been reviewed.');
+    if (transactionData.uid && transactionData.uid !== uid) throw new HttpsError('permission-denied', 'This transaction belongs to a different user.');
+    if (transactionData.balanceApplied === true) throw new HttpsError('failed-precondition', 'This request has already changed the balance and cannot be reviewed again.');
+
+    const requestId = id(typeof transactionData.requestId === 'string' && transactionData.requestId ? transactionData.requestId : transactionId);
+    const requestRef = database.doc(`transactionRequests/${requestId}`);
+    const requestSnap = await firestoreTransaction.get(requestRef);
+    let walletData = null;
+    let amount = null;
+    let balanceDelta = 0;
+    if (decision === 'approved') {
+      amount = Number(transactionData.amount);
+      if (!Number.isFinite(amount) || amount <= 0) throw new HttpsError('failed-precondition', 'The requested amount must be greater than zero.');
+      balanceDelta = getBalanceDelta(transactionData);
+      if (balanceDelta !== 0) {
+        const walletSnap = await firestoreTransaction.get(walletRef);
+        walletData = walletSnap.exists ? walletSnap.data() || {} : {};
+        if (!Number.isFinite(Number(walletData.balance ?? 0))) throw new HttpsError('failed-precondition', 'The current wallet balance is invalid.');
+        if (walletData.currency && transactionData.currency && walletData.currency !== transactionData.currency) {
+          throw new HttpsError('failed-precondition', 'The transaction currency does not match the user wallet.');
+        }
+      }
+    }
+    if (requestSnap.exists) {
+      const requestData = requestSnap.data() || {};
+      if (requestData.uid && requestData.uid !== uid) throw new HttpsError('failed-precondition', 'The linked request belongs to a different user.');
+      if (!isPendingReview(requestData.status)) throw new HttpsError('failed-precondition', 'The linked request has already been reviewed.');
+      if (decision === 'approved' && requestData.amount != null && Number(requestData.amount) !== amount) {
+        throw new HttpsError('failed-precondition', 'The linked request amount does not match the transaction amount.');
+      }
+    }
+
+    const update = { status: decision, updatedAt: timestamp() };
+    if (decision === 'approved') {
+      update.balanceApplied = balanceDelta !== 0;
+      update.balanceImpact = balanceDelta;
+      if (balanceDelta !== 0) {
+        firestoreTransaction.set(walletRef, {
+          ...walletData,
+          balance: Number(walletData.balance || 0) + balanceDelta,
+          currency: walletData.currency || transactionData.currency || null,
+          updatedAt: timestamp(),
+        }, { merge: true });
+      }
+    }
+    firestoreTransaction.update(transactionRef, update);
+    if (requestSnap.exists) firestoreTransaction.update(requestRef, { status: decision, updatedAt: timestamp() });
+    return { status: decision, balanceImpact: decision === 'approved' ? balanceDelta : null };
+    });
+  };
+}
+const reviewTransaction = createTransactionReviewer(db);
+exports.createTransactionReviewer = createTransactionReviewer;
+exports.reviewTransaction = reviewTransaction;
 function getUserDirectoryCandidates() {
   return ['adminUserDirectory', 'users'];
 }
@@ -71,6 +147,7 @@ exports.toppayAdminApi = onCall({ region: 'us-central1', maxInstances: 10 }, asy
       if (!doc.exists) throw new HttpsError('not-found', 'Transaction not found.');
       return safe.transaction(doc.id, doc.data());
     }
+    case 'reviewTransaction': return reviewTransaction(input);
     case 'methods': {
       if (!['card', 'bank'].includes(input.kind)) throw new HttpsError('invalid-argument', 'Invalid payment kind.');
       return page(db.collection(`users/${id(input.uid)}/paymentMethods`).where('kind', '==', input.kind), input.cursor, safe.method);
