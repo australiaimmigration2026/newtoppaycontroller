@@ -156,7 +156,7 @@ async function directAdminApi(action, payload = {}) {
       return { items: snapshot.docs.map(docSnap => transactionDocToSummary(docSnap.id, docSnap.data())), nextCursor: null };
     }
     case 'notifications': {
-      const snapshot = await getDocs(query(collection(db, 'users', payload.uid, 'notifications'), limit(20)));
+      const snapshot = await getDocs(query(collection(db, 'users', payload.uid, 'notification'), limit(20)));
       return { items: snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })), nextCursor: null };
     }
     case 'transaction': {
@@ -240,7 +240,7 @@ async function directAdminApi(action, payload = {}) {
         personal: ['users', uid, 'personalInformation', 'profile'],
         transactions: ['users', uid, 'transactions', recordId],
         methods: ['users', uid, 'paymentMethods', recordId],
-        notifications: ['users', uid, 'notifications', recordId],
+        notifications: ['users', uid, 'notification', recordId],
       };
       const path = recordPaths[section];
       if (!path || (['transactions', 'methods', 'notifications'].includes(section) && !recordId)) {
