@@ -8,7 +8,7 @@ function number(value) { return typeof value === 'number' && Number.isFinite(val
 function date(value) { return value && typeof value.toDate === 'function' ? value.toDate().toISOString() : null; }
 function fields(data, names) { return Object.fromEntries(names.map(name => [name, text(data?.[name])])); }
 function profile(data = {}) {
-  return { ...fields(data, ['displayName', 'name', 'email', 'phoneNumber', 'status']), admin: data.admin === true, createdAt: date(data.createdAt) };
+  return { ...fields(data, ['displayName', 'name', 'email', 'phoneNumber', 'status']), admin: data.admin === true, update: data.update === true, createdAt: date(data.createdAt) };
 }
 function wallet(data = {}) {
   return { ...fields(data, ['currency', 'status']), ...Object.fromEntries(['balance', 'rewardPoints', 'monthlyLimit', 'monthlyUsage'].map(key => [key, number(data[key])])) };

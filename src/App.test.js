@@ -222,17 +222,20 @@ test('admin can edit user values without changing field names and delete the rec
   const userButtons = await screen.findAllByRole('button', { name: /Test User/i });
   fireEvent.click(userButtons[0]);
   const profileEditButtons = await screen.findAllByRole('button', { name: 'Edit' });
+  expect(screen.getByText('update')).toBeInTheDocument();
+  expect(screen.getByText('false')).toBeInTheDocument();
   fireEvent.click(profileEditButtons[0]);
 
   const nameField = await screen.findByLabelText('name');
   fireEvent.change(nameField, { target: { value: 'Updated User' } });
+  fireEvent.change(screen.getByLabelText('update'), { target: { value: 'true' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
   await waitFor(() => expect(adminApi).toHaveBeenCalledWith('updateUserRecord', {
     uid: 'u1',
     section: 'profile',
     recordId: null,
-    data: { name: 'Updated User', status: 'active' }
+    data: { name: 'Updated User', status: 'active', update: true }
   }));
 
   fireEvent.click(screen.getByRole('tab', { name: 'Balance' }));

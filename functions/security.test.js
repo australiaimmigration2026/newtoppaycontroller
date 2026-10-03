@@ -30,6 +30,8 @@ test('masks payment data and excludes nested credentials across response types',
 });
 test('optional fields are null, and PANs in display fields are redacted', () => {
   assert.equal(safe.profile().name, null);
+  assert.equal(safe.profile().update, false);
+  assert.equal(safe.profile({ update: true }).update, true);
   assert.equal(safe.wallet({ balance: 0 }).balance, 0);
   assert.equal(safe.wallet({ balance: { pin: '1234' } }).balance, null);
   assert.equal(safe.profile({ name: 'Card 4111-1111-1111-1111' }).name, 'Card [redacted]');

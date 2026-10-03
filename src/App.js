@@ -165,8 +165,8 @@ function UserDetail({ uid, back, showDetails }) {
       <section className="panel detail-panel">
         <div className="panel-title"><div><h2>{tab}</h2><p>{tab === 'All transactions' ? 'Full history, newest first. Browse older records using the page controls.' : tab.startsWith('Saved') ? 'Showing raw payment detail values from Firestore.' : 'Account information from Toppay.'}</p></div></div>
         {tab === 'Profile' && <div className="detail-content">
-          <div className="record-section-heading"><h3>Profile</h3><button className="text-button" onClick={() => startRecordEdit('profile', data.profile || {})}>Edit</button></div>
-          <Fields data={data.profile || {}}/>
+          <div className="record-section-heading"><h3>Profile</h3><button className="text-button" onClick={() => startRecordEdit('profile', { ...data.profile, update: data.profile?.update === true })}>Edit</button></div>
+          <Fields data={{ ...data.profile, update: data.profile?.update === true }}/>
           <div className="record-section-heading"><h3>Personal information</h3><button className="text-button" disabled={!Object.keys(data.personal || {}).length} onClick={() => startRecordEdit('personal', data.personal || {})}>Edit</button></div>
           <Fields data={data.personal || {}}/>
         </div>}
