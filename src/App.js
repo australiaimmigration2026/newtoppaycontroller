@@ -87,7 +87,20 @@ function Methods({ uid, kind, onEdit }) {
 }
 function Notifications({ uid, onEdit }) {
   const list = usePage('notifications', { uid }, true);
-  return <><ListFeedback list={list} noun="notifications"/><div className="method-grid">{list.items.map(notification => <article className="method" key={notification.id}><div className="method-heading"><h3>{notification.title || notification.subject || 'Notification'}</h3><button className="text-button" onClick={() => onEdit('notifications', notification, list.refresh)}>Edit</button></div><Fields data={notification}/></article>)}</div>{!list.busy && !list.error && !list.items.length && <Empty title="No notifications" icon="requests">No notifications were found for this user.</Empty>}<Pager list={list}/></>;
+  return <><ListFeedback list={list} noun="notifications"/><div className="table-wrap"><table className="notifications-table"><thead><tr><th>Text</th><th>Date</th><th>Package</th><th>Status</th><th>Notification ID</th><th/></tr></thead><tbody>{list.items.map(notification => {
+    const text = notification.text || notification.message || notification.title || notification.subject;
+    const notificationDate = notification.date || notification.createdAt || notification.timestamp;
+    const packageName = notification.package || notification.packageName || notification.packageTitle;
+    const formattedDate = notificationDate?.toDate ? date(notificationDate.toDate()) : date(notificationDate);
+    return <tr key={notification.id}>
+      <td><div className="notification-content">{(notification.title || notification.subject) && <strong className="notification-title">{notification.title || notification.subject}</strong>}<span className="notification-highlight notification-text">{value(text)}</span></div></td>
+      <td><span className="notification-highlight notification-date">{formattedDate}</span></td>
+      <td><span className="notification-highlight notification-package">{value(packageName)}</span></td>
+      <td><Badge>{notification.status || (notification.read ? 'Read' : 'Unread')}</Badge></td>
+      <td className="mono">{notification.id}</td>
+      <td><button className="text-button" onClick={() => onEdit('notifications', notification, list.refresh)}>Edit</button></td>
+    </tr>;
+  })}</tbody></table></div>{!list.busy && !list.error && !list.items.length && <Empty title="No notifications" icon="requests">No notifications were found for this user.</Empty>}<Pager list={list}/></>;
 }
 function UserDetail({ uid, back, showDetails }) {
   const [tab, setTab] = useState('Profile'); const [data, setData] = useState(null); const [error, setError] = useState(''); const [retry, setRetry] = useState(0);

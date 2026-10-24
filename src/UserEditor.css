@@ -122,6 +122,56 @@
   white-space: nowrap;
 }
 
+.notifications-table {
+  min-width: 760px;
+  white-space: normal;
+}
+
+.notifications-table td {
+  vertical-align: middle;
+}
+
+.notification-highlight {
+  display: inline-block;
+  max-width: 100%;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  line-height: 1.45;
+}
+
+.notification-content {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+}
+
+.notification-title {
+  color: #273b2d;
+  font-size: 12px;
+}
+
+.notification-text {
+  max-width: 320px;
+  background: #f1f6f0;
+  border-color: #e3ecdf;
+  color: #344d3c;
+  overflow-wrap: anywhere;
+}
+
+.notification-date {
+  background: #f5f7f3;
+  border-color: #e8ece4;
+  color: #697966;
+  white-space: nowrap;
+}
+
+.notification-package {
+  background: #fff7e8;
+  border-color: #f2e4c7;
+  color: #85652f;
+}
+
 .transaction-review {
   margin-top: 22px;
   padding: 16px 0 0;

@@ -46,7 +46,7 @@ test('loads and displays notifications for the selected user', async () => {
     if (action === 'session') return { verified: true };
     if (action === 'users') return { items: [{ uid: 'u1', name: 'Test User', status: 'active' }], nextCursor: null };
     if (action === 'user') return { profile: { name: 'Test User' }, wallet: {}, personal: {} };
-    if (action === 'notifications' && input.uid === 'u1') return { items: [{ id: 'notice-1', title: 'Payment update', message: 'Your payment was received', read: false }], nextCursor: null };
+    if (action === 'notifications' && input.uid === 'u1') return { items: [{ id: 'notice-1', title: 'Payment update', message: 'Your payment was received', date: '2024-01-01T00:00:00.000Z', package: 'Premium package', read: false }], nextCursor: null };
     if (action === 'updateUserRecord') return { ok: true };
     throw new Error('Unexpected action');
   });
@@ -55,9 +55,14 @@ test('loads and displays notifications for the selected user', async () => {
   fireEvent.click(await screen.findByRole('button', { name: /Test User No email/ }));
   fireEvent.click(await screen.findByRole('tab', { name: 'Notifications' }));
 
-  expect(await screen.findByRole('heading', { name: 'Payment update' })).toBeInTheDocument();
-  expect(screen.getByText('Your payment was received')).toBeInTheDocument();
+  expect(await screen.findByText('Your payment was received')).toBeInTheDocument();
+  expect(screen.getByText('Payment update')).toBeInTheDocument();
+  expect(screen.getByText(/Jan 1, 2024/)).toHaveClass('notification-highlight', 'notification-date');
+  expect(screen.getByText('Premium package')).toHaveClass('notification-highlight', 'notification-package');
   expect(screen.getByText('notice-1')).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Text' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Date' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Package' })).toBeInTheDocument();
   expect(adminApi).toHaveBeenCalledWith('notifications', { uid: 'u1', cursor: null });
 
   fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
@@ -65,7 +70,7 @@ test('loads and displays notifications for the selected user', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
   await waitFor(() => expect(adminApi).toHaveBeenCalledWith('updateUserRecord', {
     uid: 'u1', section: 'notifications', recordId: 'notice-1',
-    data: { id: 'notice-1', title: 'Payment update', message: 'Payment completed successfully', read: false }
+    data: { id: 'notice-1', title: 'Payment update', message: 'Payment completed successfully', date: '2024-01-01T00:00:00.000Z', package: 'Premium package', read: false }
   }));
 });
 
